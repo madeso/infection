@@ -1,0 +1,44 @@
+FINISHED
+* ( Mouse speed seems to slow down in low fps )
+* ( A Console buffer should be implemented )
+* (Split main loop in smaller helping manager functions to aid in movie/meny/mission mode)
+* (Make sure that all functions in the weaponsystem is using the keys in the control struct)
+* (Primary and seconday fire should be in the keys section aswell)
+* (Reset enemies at level load)
+
+TODO
+Handle more keys(numpad) in the console
+cursor/carret in the console that blinks
+Explosions
+Position entity
+getPosition(or something) should return a pointer, not the exact position. (In the conversation code)
+More LUA functions
+Saving scriptpoition
+Saving timeouts
+Saving game messages
+Wait should be implemented or removed from the conversation command list
+The HUD images should be become clearer. Numbers should be seen more effeciant.
+AmbSound entity
+AmbLight entity
+Trace for use every frame to find useable entites instead of by use. Able to change crosshair on use.
+Inf_GlobalData manager so LUA can save global data allowing a non-linear gameplay
+Save script position
+seperate player weapon from weapontype
+Show only choosable weapons (or weapons that you have)
+Conversation priority
+Conversation cashe
+If a conversation is failed, enable the entity again?
+Fix @@@todo@@@
+Ability to remove timeout scripts (through number?)
+Change scripts on entities
+Mission status
+Mission objectives
+Mission text (type B-rated action film style)
+Console transition (top to bottom with a picture?)
+Faster text drawing - sikorgans fast geFont?
+Poly/Blood faster drawing (geWorld_AddPoly, geWorld_RemovePoly instead of geWorld_AddPolyOnce?)
+Meny interface(player manager - add remove player - gui options)
+When firing and dead, load the last save/new game/load the last load, but only after 1 sec(optional)
+In-game movies(through scripting?)
+Fix click while reloading in weapon system
+option - quick save at level load
