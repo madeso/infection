@@ -1,0 +1,2 @@
+gamemessage *That should do it.
+enable frontDoor

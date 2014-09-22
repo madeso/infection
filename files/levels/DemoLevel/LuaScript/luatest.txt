@@ -1,0 +1,20 @@
+-- luatest
+-- posx, posy, posz = getPlayerPos();
+-- print( "Position (x, y, z)=(" .. posx .. ", " .. posy .. ", " .. posz .. ")" );
+
+playerGive("Red keycard");
+playerGive("Glass of water");
+
+if playerHas("Glass of water") then 
+  game_message("A glass of water is always nice");  
+else
+  game_message("I'm thirsty");
+end
+
+playerLoose("Glass of water");
+
+if playerHas("Glass of water") then 
+  game_message("I can't take another glass");
+else
+  game_message("I need a another glass of water");
+end

@@ -1,0 +1,12 @@
+
+TalkingTo somePerson
+
+Subtitle	*Good day to you sir
+PersonSay	good_day
+
+Subtitle	*Thanks!
+YouSay		thanks
+
+enable somePerson
+
+EndConversation

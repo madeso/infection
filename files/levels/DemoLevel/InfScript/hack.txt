@@ -1,0 +1,2 @@
+gamemessage *Hold on a moment and I'll hack the computer and open the door for you
+timeout 5 script hack_finished.txt

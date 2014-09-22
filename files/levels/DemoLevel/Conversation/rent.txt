@@ -1,0 +1,35 @@
+ScriptOnConversationEnd onConversationEnd_somePerson.txt
+ConversationSquareRadius 350000
+TalkingTo somePerson
+AllowMiddleEnds
+
+Subtitle	*Good afternoon sir!
+PersonSay	afternoon
+
+Subtitle	*Do you have a room?
+YouSay		have_a_room
+
+Subtitle	*Yes sir!
+PersonSay	yes
+
+Subtitle	*How much?
+YouSay		how_much
+
+Subtitle	*4 dollars per night sir!
+PersonSay	price
+
+Subtitle	*I'll take it!
+YouSay		ill_take_it
+
+Subtitle	*Here are the keys...
+PersonSay	keys
+
+Script GetKeys.txt
+
+Subtitle	*Room 347, third floor, sir
+PersonSay	room_347
+
+Subtitle	*Thanks
+YouSay		thanks
+
+EndConversation

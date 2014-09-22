@@ -1,0 +1,29 @@
+ThroughRadioWith radio
+
+Subtitle	*Regroup team
+PersonSay	regroup
+
+Subtitle	*Do you have a room?
+YouSay		have_a_room
+
+Subtitle	*Affirmitive!
+PersonSay	ct_affirm
+
+Subtitle	*Do you have it here?
+YouSay		have_it_here
+
+Subtitle	*Negative
+PersonSay	negative
+
+Subtitle	*Where do I get my place?
+YouSay		get_my_place
+
+Subtitle	*Meet at the rendevouz point
+PersonSay	meetme
+
+Subtitle	*Thanks!
+YouSay		thanks
+
+gamemessage *Get to the rendevouz point to get a room
+
+EndConversation
