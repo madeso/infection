@@ -45,14 +45,13 @@ soundsys_sound menyBlip;
 
 geBoolean fn_game(){
 	printLog("Game pressed\n");
+	BLIP();
 	if( World ){
 		inGameMeny = 0;
 	} else {
 		new_game();
 		update_timing();
 	}
-
-	BLIP();
 	reset_cursor();
 	return GE_TRUE;
 }

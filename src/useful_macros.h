@@ -37,3 +37,7 @@ Useful defines and macros
 #ifndef generate_random
 #define generate_random(x)		rand()%x
 #endif
+
+#define IN_DEG(x) x = (x)*GE_PI/180.0f
+
+#define IN_DEG_VECTOR(v) { IN_DEG(v.X); IN_DEG(v.Y); IN_DEG(v.Z); }

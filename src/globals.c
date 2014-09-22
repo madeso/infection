@@ -5,7 +5,10 @@
 #include "xtra_g3d.h"
 #include "player.h"
 
-
+//if context is zero then the move is the player and the actor can be picked up
+// if context is one then the move is not the player and it's someting other
+// then we only check if we can move through that object
+// all purpose function :)
 geBoolean cb_move(geWorld_Model* Model, geActor* Actor, void * Context)
 {
 	// this should be updated to give more scheck

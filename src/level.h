@@ -100,15 +100,12 @@ void level_enableLevelFog();
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma GE_Type("SimpleDoor.bmp")
 typedef struct _Inf_SimpleDoor{
+	int state;
 #pragma GE_Published
 
 	float			currentPos;
 #pragma GE_DefaultValue(currentPos, "0.0")
 #pragma GE_Documentation(currentPos, "Time currently at in animation.")
-
-	float			timeAllowedOpen;
-#pragma GE_DefaultValue(timeAllowedOpen, "2.0")
-#pragma GE_Documentation(timeAllowedOpen, "Time which the door is allowed to be open for.")
 
 	float			distanceToOpen;
 #pragma GE_DefaultValue(distanceToOpen, "150.0")
@@ -128,8 +125,48 @@ typedef struct _Inf_SimpleDoor{
 	geBoolean enable;
 #pragma GE_Documentation(enable, "True if it should react on player movement")
 #pragma GE_DefaultValue(enable, "True")
+
+	geBoolean pushable;
+#pragma GE_Documentation(pushable, "True if the player has to push/use it to open")
+#pragma GE_DefaultValue(pushable, "False")
+
+	geBoolean optimized;
+#pragma GE_Documentation(optimized, "True if the door will close when player leaves, False if the door will keep openeing and then close")
+#pragma GE_DefaultValue(optimized, "True")
 } Inf_SimpleDoor;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma GE_Type("MovingEntity.bmp")
+typedef struct _Inf_MovingEntity{
+#pragma GE_Published
+	float			currentPos;
+#pragma GE_DefaultValue(currentPos, "0.0")
+#pragma GE_Documentation(currentPos, "Time currently at in animation.")
+
+	geWorld_Model   *model;
+#pragma GE_Documentation(model, "The door model")
+
+	geVec3d			origin;
+#pragma GE_Origin(origin)
+#pragma GE_Documentation(origin, "The origin")
+
+	char *name;
+#pragma GE_Documentation(name, "The name of this entity. Is used when referencing this entity")
+#pragma GE_DefaultValue(name, "Inf_SimpleDoor")
+
+	geBoolean enable;
+#pragma GE_Documentation(enable, "True if it should move")
+#pragma GE_DefaultValue(enable, "True")
+
+	geBoolean disableAfterAnim;
+#pragma GE_Documentation(enable, "True if disable after one anim")
+#pragma GE_DefaultValue(enable, "False")
+} Inf_MovingEntity;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

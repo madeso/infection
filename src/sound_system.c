@@ -203,7 +203,8 @@ geBoolean soundsys_conversation_personSay(char* soundFile, geVec3d *position, fl
 		else {
 			geSound3D_GetConfig(World, &XForm, position, METERS(min), 0.0f, &vol, &pan, &freq); 
 		}
-		talk_sound = geSound_PlaySoundDef(soundsys, talk_sounddef, vol, SETUP_PAN(pan), SOUNDSYS_DEFAULT_FREQUENCY *heroTime>1.0f?1.0f:heroTime, GE_FALSE);
+		talk_sound = geSound_PlaySoundDef(soundsys, talk_sounddef, vol, SETUP_PAN(pan), SOUNDSYS_DEFAULT_FREQUENCY *heroTime, GE_FALSE); // @@@
+		//talk_sound = geSound_PlaySoundDef(soundsys, talk_sounddef, vol, SETUP_PAN(pan), SOUNDSYS_DEFAULT_FREQUENCY *heroTime>1.0f?1.0f:heroTime, GE_FALSE);
 	} else {
  		talk_sound = geSound_PlaySoundDef(soundsys, talk_sounddef, SOUNDSYS_DEFAULT_VOLUME, SOUNDSYS_DEFAULT_PAN, SOUNDSYS_DEFAULT_FREQUENCY *heroTime, GE_FALSE);
 	}

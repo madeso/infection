@@ -5,6 +5,9 @@
 #include "TPool.h"
 #include "globalGenesis.h"
 #include "log.h"
+#include "EffParticle.h"
+#include <math.h>
+#include "proposeg3d.h"
 
 /*
 geBitmap*	stoneSmoke,
@@ -21,6 +24,7 @@ geBitmap* electricSpark[ELECTRIC_SPARK_BITMAPS];
 geBitmap* simpleSpark[SIMPLE_SPARK_BITMAPS];
 
 geBitmap* bloodTexture;
+geBitmap* electricBolt;
 
 void fxbitmaps_init(){
 	int i = 0;
@@ -48,6 +52,13 @@ void fxbitmaps_init(){
 	rockSprite = 0;
 	sandSprite = 0;
 	bloodTexture = 0;
+
+	flameSprite = 0;
+	smokeSprite = 0;
+	gemSprite = 0;
+	fireSprite = 0;
+
+	electricBolt = 0;
 }
 
 #define TEST_BITMAP(bitmap, error_message )		if( !bitmap ){ \
@@ -96,7 +107,15 @@ geBoolean fxbitmaps_load(){
 	//sofaSprite = LOAD_BITMAP(".//gfx//fx//sofaSprite.bmp", ".//gfx//fx//ASofaSprite.bmp");
 	//rockSprite = LOAD_BITMAP(".//gfx//fx//rockSprite.bmp", ".//gfx//fx//ARockSprite.bmp");
 	//sandSprite = LOAD_BITMAP(".//gfx//fx//sandSprite.bmp", ".//gfx//fx//ASandSprite.bmp");
+
+	flameSprite = LOAD_BITMAP(".//gfx//fx//flame03.bmp", ".//gfx//fx//a_flame.bmp");
+	smokeSprite = LOAD_BITMAP(".//gfx//fx//lvsmoke.bmp", ".//gfx//fx//A_lvsmoke.bmp");
+	gemSprite = LOAD_BITMAP(".//gfx//fx//Gem.bmp", ".//gfx//fx//a_Gem.bmp");
+	fireSprite = LOAD_BITMAP(".//gfx//fx//flame03.bmp", ".//gfx//fx//a_fire.bmp");
 	
+	electricBolt = LOAD_BITMAP(".//gfx//fx//bolt.bmp",".//gfx//fx//bolt.bmp");
+
+	TEST_BITMAP(electricBolt, "Failed to load bolt");
 	TEST_BITMAP(stoneSmoke,		"Failed to load stoneSmoke");
 	TEST_BITMAP(snowSmoke,		"Failed to load snowSmoke");
 	TEST_BITMAP(electricSmoke,	"Failed to load electricSmoke");
@@ -132,6 +151,11 @@ geBoolean fxbitmaps_load(){
 	//TEST_BITMAP(sofaSprite		,"Failed to load sofa sprite");
 	//TEST_BITMAP(rockSprite		,"Failed to load rock sprite");
 	//TEST_BITMAP(sandSprite		,"Failed to load sand sprite");
+
+	TEST_BITMAP(flameSprite	,"Failed to load flame texture");
+	TEST_BITMAP(smokeSprite	,"Failed to load smoke texture");
+	TEST_BITMAP(gemSprite	,"Failed to load gem texture");
+	TEST_BITMAP(fireSprite	,"Failed to load gem texture");
 
 	return result;
 }
@@ -327,6 +351,41 @@ void BloodExplosion(geVec3d position){
 
 #define SCALE 20.0f
 void fx_blast(geVec3d from, geVec3d to){
+	ElectricBolt bolt;
+	GE_RGBA rgba;
+	int res=0;
+
+	rgba.r = 160.0f;
+	rgba.g = 160.0f;
+	rgba.b = 255.0f;
+	rgba.a = 255.0f;
+
+	memset(&bolt, 0, sizeof(ElectricBolt) );
+
+	bolt.imortal = GE_FALSE;
+	bolt.life = 0.5f;
+	bolt.origin = from;
+	bolt.Terminus = to;
+	bolt.Width = 8;
+	bolt.NumPoints = 64;
+	bolt.Intermittent = 0;
+	bolt.MinFrequency = 4.0f;
+	bolt.MaxFrequency = 1.0f;
+	bolt.Wildness = 0.3f;
+	bolt.DominantColor = 2;
+	bolt.Color = rgba;
+	bolt.Texture = electricBolt;
+	
+	res = EM_Item_Add(EM, EFF_ELECTRICBOLT, &bolt);
+	if( res == -1){
+		system_message("Bolt bad");
+	}
+}
+#undef SCALE
+
+/*
+#define SCALE 20.0f
+void fx_blast(geVec3d from, geVec3d to){
 	Bolt bolt;
 	GE_RGBA rgba;
 	int res=0;
@@ -360,3 +419,261 @@ void fx_blast(geVec3d from, geVec3d to){
 	}
 }
 #undef SCALE
+*/
+
+geBoolean fncb_killParticle(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to){
+	return GE_TRUE;
+}
+geBoolean fncb_bounceParticle(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to){
+	geVec3d_Reflect(&(particle->ptclVelocity), &(data->Plane.Normal), &(particle->ptclVelocity), 0.5f);
+	return GE_FALSE;
+}
+geBoolean fncb_fireParticle(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to){
+	if( data->Actor ) {
+		//data->Actor
+	}
+	else {
+		geVec3d impact;
+		geVec3d_AddScaled(&(data->Impact), &(data->Plane.Normal), 1.0f, &impact);
+		fx_fire(&impact, GE_FALSE);
+	}
+
+	// this looked bad
+	/*{
+		geVec3d wIn;
+		geXForm3d_GetIn(&XForm, &wIn);
+		if( ! DecalMgr_AddDecal( dMgr, DecalMgr_GetRandomDecal( DECALTYPE_SCORCHSM ),
+			-1.0, RGBA_Array, 1.0f, &(data->Impact),
+			&(data->Plane.Normal), &wIn)
+			)
+			system_message("Failed to add decal");
+	}*/
+
+	return GE_TRUE;
+}
+
+void fx_grenadeExplosion(geVec3d at){
+#define MIN 0.1f
+#define SPHERE_POS_TYPE 1
+#define PI 3.1415926535
+	geExtBox bb;
+	int i;
+
+	int count;
+	geVec3d gravity;
+	geBitmap* texture;
+	float minLife;
+	float maxLife;
+	float minSpeed;
+	float maxSpeed;
+	GE_LVertex vertex;
+	geVec3d* pos;
+
+	geVec3d velocity;
+	float life;
+	double theta;
+	double beta;
+	float speed;
+
+	vertex.u = 0.0f;
+	vertex.v = 0.0f;
+	vertex.r = 255.0f;
+	vertex.g = 255.0f;
+	vertex.b = 255.0f;
+	vertex.a = 255.0f;
+
+	geVec3d_Clear(&gravity);
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+	pos = (geVec3d*)(&vertex.X);
+	*pos = at;
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+	// Smoke
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+
+	texture = smokeSprite;
+	count = 10;
+	minLife = 6.0f;
+	maxLife = 12.0f;
+	minSpeed = 70.0f;
+	maxSpeed = 140.0f;
+	gravity.Y = -50.0f;
+
+	maxLife -= minLife;
+	maxSpeed -= minSpeed;
+	for(i=0; i<count; i++){
+		life = minLife + (RAND_FLOAT() * maxLife);
+		speed = minSpeed + (RAND_FLOAT() * maxSpeed);
+
+		// generate sphereical coordinates
+#if SPHERE_POS_TYPE != 3
+		theta = RAND_FLOAT() * 2 * PI;
+#pragma message("theta = RAND_FLOAT() * 2 * PI;")
+#endif
+#if SPHERE_POS_TYPE != 2
+		beta = RAND_FLOAT() * PI;
+#pragma message("beta = RAND_FLOAT() * PI;")
+#endif
+
+#if SPHERE_POS_TYPE == 3
+		theta = (i/count) * 2 * PI;
+#pragma message("theta = (i/count) * 2 * PI;")
+#endif
+#if SPHERE_POS_TYPE == 2
+		beta = (i/count) * PI;
+#pragma message("beta = (i/count) * PI;")
+#endif
+		//convert from spherical coordinates to cartesian
+		velocity.X = speed * (float)( cos(theta) * sin(beta) );
+		velocity.Y = speed * (float)( sin(theta) * sin(beta) + 1.5 );
+		velocity.Z = speed * (float)( cos(beta) );
+		// set it a bit from the middle
+		//geVec3d_AddScaled(&at, &velocity, RAND_FLOAT(), pos);
+		Particle_SystemAddParticle(EM->Ps, texture, &vertex, 0, life, &velocity, 4.0f, 2.0f, GE_TRUE, &gravity, fncb_bounceParticle, &bb);
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+	// Fire
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+	texture = flameSprite;
+	count = 13;
+	minLife = 6.0f;
+	maxLife = 10.0f;
+	minSpeed = 10.0f;
+	maxSpeed = 25.0f;
+	gravity.Y = -10.0f;
+
+	maxLife -= minLife;
+	maxSpeed -= minSpeed;
+	for(i=0; i<count; i++){
+		life = minLife + (RAND_FLOAT() * maxLife);
+		speed = minSpeed + (RAND_FLOAT() * maxSpeed);
+
+		// generate sphereical coordinates
+#if SPHERE_POS_TYPE != 3
+		theta = RAND_FLOAT() * 2 * PI;
+#endif
+#if SPHERE_POS_TYPE != 2
+		beta = RAND_FLOAT() * PI;
+#endif
+
+#if SPHERE_POS_TYPE == 3
+		theta = (i/count) * 2 * PI;
+#endif
+#if SPHERE_POS_TYPE == 2
+		beta = (i/count) * PI;
+#endif
+		//convert from spherical coordinates to cartesian
+		velocity.X = speed * (float)( cos(theta) * sin(beta) );
+		velocity.Y = speed * (float)( sin(theta) * sin(beta) + 1.5 );
+		velocity.Z = speed * (float)( cos(beta) );
+		// set it a bit from the middle
+		//geVec3d_AddScaled(&at, &velocity, RAND_FLOAT(), pos);
+		// fncb_bounceParticle
+		// fncb_killParticle
+		Particle_SystemAddParticle(EM->Ps, texture, &vertex, 0, life, &velocity, 5.0f, 7.0f, GE_TRUE, &gravity, fncb_killParticle, &bb);
+	}
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+	// Gem
+	///////////////////////////////////////////////////////////////////////////////////////////////////
+
+	texture = gemSprite;
+	count = 2;
+	minLife = 0.5f;
+	maxLife = 3.0f;
+	minSpeed = 100.0f;
+	maxSpeed = 150.0f;
+	gravity.Y = -100.0f;
+
+	maxLife -= minLife;
+	maxSpeed -= minSpeed;
+	for(i=0; i<count; i++){
+		life = minLife + (RAND_FLOAT() * maxLife);
+		speed = minSpeed + (RAND_FLOAT() * maxSpeed);
+
+		// generate sphereical coordinates
+#if SPHERE_POS_TYPE != 3
+		theta = RAND_FLOAT() * 2 * PI;
+#endif
+#if SPHERE_POS_TYPE != 2
+		beta = RAND_FLOAT() * PI;
+#endif
+
+#if SPHERE_POS_TYPE == 3
+		theta = (i/count) * 2 * PI;
+#endif
+#if SPHERE_POS_TYPE == 2
+		beta = (i/count) * PI;
+#endif
+		//convert from spherical coordinates to cartesian
+		velocity.X = speed * (float)( cos(theta) * sin(beta) );
+		velocity.Y = speed * (float)( sin(theta) * sin(beta) + 1.5 );
+		velocity.Z = speed * (float)( cos(beta) );
+		// set it a bit from the middle
+		//geVec3d_AddScaled(&at, &velocity, RAND_FLOAT(), pos);
+		Particle_SystemAddParticle(EM->Ps, texture, &vertex, 0, life, &velocity, 1.0f, 1.0f, GE_FALSE, &gravity, fncb_bounceParticle, &bb);
+	}
+
+#undef MIN
+}
+void fx_fire(geVec3d* at, geBoolean anchor){
+	Spray sp;
+	geVec3d to;
+	int index;
+	GE_RGBA rgba;
+	geVec3d direction;
+	rgba.r = rgba.g = rgba.b = 255.0f; rgba.a = 255.0f;
+
+	geVec3d_Set(&direction, 0.0f, 1.0f, 0.0f); 
+	//geVec3d_AddScaled(&from, &direction, 5.0f, &to);
+	memset(&sp, 0, sizeof(Spray) );
+
+	if( anchor ){
+		to = direction;
+		sp.AnchorPoint = at;
+		geVec3d_Clear(& ( sp.Source) );
+		sp.Dest = direction;
+	} else {
+		sp.AnchorPoint = 0;
+		sp.Source = *at;
+		 geVec3d_Add(at, &direction, &(sp.Dest) );
+	}
+
+	sp.Texture = flameSprite;
+	sp.SprayLife = 2.0f; // change to 0.5f
+	sp.Rate = 0.3f;
+	sp.ColorMin = rgba;
+	sp.ColorMax = rgba;
+	//geVec3d_Clear(&(sp.Gravity));
+	sp.ShowAlways=GE_TRUE;
+	sp.MinScale = 2.0f;
+	sp.MaxScale = 5.0f;
+	sp.MinUnitLife = 0.7f;
+	sp.MaxUnitLife = 1.0f;
+	sp.MinSpeed = 70.0f;
+	sp.MaxSpeed = 80.0f;
+	sp.ScaleStyle = SSS_RANDOM_SCALE;
+	sp.waitTime = 0.0f;
+
+	index = EM_Item_Add(EM, EFF_SPRAY, &sp);
+}
+void fx_shootFire(geVec3d at, geVec3d direction){
+#define MIN 5.0f
+	geExtBox bb;
+	GE_LVertex vertex;
+	geVec3d* pos;
+
+	vertex.u = 0.0f;
+	vertex.v = 0.0f;
+	vertex.r = 255.0f;
+	vertex.g = 255.0f;
+	vertex.b = 255.0f;
+	vertex.a = 255.0f;
+
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+	pos = (geVec3d*)(&vertex.X);
+	*pos = at;
+	Particle_SystemAddParticle(EM->Ps, fireSprite, &vertex, 0, 0.25f, &direction, 1.0f, 17.0f, GE_TRUE, 0, fncb_fireParticle, &bb);
+#undef MIN
+}

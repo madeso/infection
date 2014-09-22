@@ -16,6 +16,14 @@ Inf_CommandEntity
 
 */
 
+#define TYPE_BUTTON 0
+#define TYPE_DOOR 1
+
+typedef struct _EntityModelConnection {
+	void* data;
+	int type;
+} EntityModelConnection;
+
 // initializes the command entity data
 void new_commandEntity( geWorld* world)
 {
@@ -49,24 +57,37 @@ void new_commandEntity( geWorld* world)
 	}
 }
 
-void new_button(geWorld* world)
+geBoolean new_button(geWorld* world)
 {
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
+	int fail = 0;
 
     Set = geWorld_GetEntitySet(world, "Inf_Button");
-	if (Set == NULL) return;
+	if (Set == NULL) return GE_TRUE;
 
     // enumerate buttons
     for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
 		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
     {
         Inf_Button *pButton = (Inf_Button*)geEntity_GetUserData(Entity);
+		EntityModelConnection* con;
 
+		con=0;
+		con = malloc( sizeof(EntityModelConnection) );
+
+		if(! con ){
+			fail = 1;
+		} else {
+			con->data = pButton;
+			con->type = TYPE_BUTTON;
+		}
 		// remember the owner
-		geWorld_ModelSetUserData(pButton->model, pButton);
-		
+		geWorld_ModelSetUserData(pButton->model, con);
 	}
+
+	if( fail ) return GE_FALSE;
+	return GE_TRUE;
 }
 
 // iterates the commandEnttitys
@@ -110,6 +131,134 @@ void iterate_commandEntity( geVec3d* pos, geWorld* world)
 	}
 }
 
+void disable_movingEntites(geWorld* world, char* name) {
+	geFloat				speed = 1.0f;
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+
+    Set = geWorld_GetEntitySet(world, "Inf_MovingEntity");
+	if (Set == NULL) return;
+
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_MovingEntity *pDoor = (Inf_MovingEntity*)geEntity_GetUserData(Entity);
+
+		// If we have a door...
+		if (pDoor->model)
+		{
+			if (strcmp(pDoor->name, name) == 0 ) {
+				pDoor->enable = GE_FALSE;
+			}
+		}
+	}
+}
+
+void enable_movingEntites(geWorld* world, char* name) {
+	geFloat				speed = 1.0f;
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+
+    Set = geWorld_GetEntitySet(world, "Inf_MovingEntity");
+	if (Set == NULL) return;
+
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_MovingEntity *pDoor = (Inf_MovingEntity*)geEntity_GetUserData(Entity);
+
+		// If we have a door...
+		if (pDoor->model)
+		{
+			if (strcmp(pDoor->name, name) == 0 ) {
+				pDoor->enable = GE_TRUE;
+			}
+		}
+	}
+}
+
+// Inf_MovingEntity
+void iterate_movingEntites(geWorld* world) {
+	geFloat				speed = 1.0f;
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+    geMotion			*TempMotion;
+    gePath				*Path;
+
+    Set = geWorld_GetEntitySet(world, "Inf_MovingEntity");
+	if (Set == NULL) return;
+
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        float tStart, tEnd;
+        Inf_MovingEntity *pDoor = (Inf_MovingEntity*)geEntity_GetUserData(Entity);
+
+		if(! pDoor->enable ) continue;
+
+		// If we have a door...
+		if (pDoor->model)
+		{
+			// Create an XForm for the door.
+            geXForm3d xfmDest;
+			geBoolean reachedEnd = GE_FALSE;
+
+			TempMotion = geWorld_ModelGetMotion(pDoor->model);	
+            Path = geMotion_GetPath(TempMotion, 0);	
+			geMotion_GetTimeExtents(TempMotion, &tStart, &tEnd);
+			if (pDoor->currentPos >= tEnd){
+				pDoor->currentPos = tEnd;
+				reachedEnd = GE_TRUE;
+				if( pDoor->disableAfterAnim ) {
+					pDoor->enable = GE_FALSE;
+				}
+			}
+
+			pDoor->currentPos = pDoor->currentPos + speed * TIME * enemyTime; // Move the model's position
+			gePath_Sample(Path, pDoor->currentPos, &xfmDest); // Sample the path into xfmDest
+			geWorld_SetModelXForm(world, pDoor->model, &xfmDest); // Render the xfmDest xform.
+
+			if( reachedEnd ) {
+				pDoor->currentPos = 0.0f;
+			}
+		}
+	}
+}
+
+geBoolean new_doors(geWorld* world) 
+{
+	geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+	int fail = 0;
+    
+    Set = geWorld_GetEntitySet(world, "Inf_SimpleDoor");
+	if (Set == NULL) return GE_TRUE;
+
+    // enumerate doors
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_SimpleDoor *pDoor = (Inf_SimpleDoor*)geEntity_GetUserData(Entity);
+
+		if (pDoor->model) {	
+			EntityModelConnection* con;
+			con = 0;
+			con = malloc(sizeof(EntityModelConnection));
+			if( con ) {
+				con->data = pDoor;
+				con->type = TYPE_DOOR;
+			} else {
+				fail = 1;
+			}
+			pDoor->state = 0;
+			geWorld_ModelSetUserData(pDoor->model, con);
+		}
+	}
+
+	if( fail ) return GE_FALSE;
+	return GE_TRUE;
+}
+
 void iterate_doors( geVec3d* pos, geWorld* world) 
 {
 	geFloat				speed = 1.0f;
@@ -132,59 +281,82 @@ void iterate_doors( geVec3d* pos, geWorld* world)
         // get individual door data
         Inf_SimpleDoor *pDoor = (Inf_SimpleDoor*)geEntity_GetUserData(Entity);
 
-		// If the model is even partly open we need to see what's behind it.
-		if (pDoor->currentPos != 0.0f) geWorld_OpenModel(world, pDoor->model, GE_TRUE);
-
-		// Don't show what's behind.
-		else geWorld_OpenModel(world, pDoor->model, GE_FALSE);
+		if(! pDoor->enable ){
+			continue;
+		}
 
 		// If we have a door...
 		if (pDoor->model)
 		{		
+			geXForm3d xfmDest;
+			geBoolean within;
+			static float increment;
 
+
+			// If the model is even partly open we need to see what's behind it.
+			if (pDoor->currentPos != 0.0f) geWorld_OpenModel(world, pDoor->model, GE_TRUE);
+
+			// Don't show what's behind.
+			else geWorld_OpenModel(world, pDoor->model, GE_FALSE);
+
+		
 			// Create an XForm for the door.
-            geXForm3d xfmDest;
+			increment = speed * TIME * enemyTime;
 
-			// Get our actor's position.
-			Temppos = *pos; //m_XForm.Translation; 
-
-			/*// get forward vector 
-			geXForm3d_GetIn(&GetPlayer()->m_XForm, &TempVec);	
-			
-			// Move
-			geVec3d_AddScaled (&Temppos, &TempVec, 0, &Temppos);
-
-			// Move to hand position.
-			Temppos.Y += 100.0f;*/								
-
-			// get motion data for world model
-            TempMotion = geWorld_ModelGetMotion(pDoor->model);	
-
-			// get animation path
+			// Get player pos
+			Temppos = *pos;
+			TempMotion = geWorld_ModelGetMotion(pDoor->model);	
             Path = geMotion_GetPath(TempMotion, 0);	
-
-			// Find out where to start and stop the motion.
 			geMotion_GetTimeExtents(TempMotion, &tStart, &tEnd);
-			
-			// If we passed the end of the door
-			if (pDoor->currentPos >= tEnd) 
-			{
-				// reset it to 0.0f.
-				pDoor->currentPos = 0.0f;
+
+			within = (geVec3d_DistanceBetween(&pDoor->origin, &Temppos) <= pDoor->distanceToOpen) ;
+
+			if( pDoor->optimized ) {
+				if( within ){
+					pDoor->currentPos += increment;
+					if( pDoor->currentPos > tEnd ) {
+						pDoor->currentPos = tEnd;
+					}
+				}
+				else {
+					pDoor->currentPos -= increment;
+					if( pDoor->currentPos < tStart ) {
+						pDoor->currentPos = tStart;
+					}
+				}
+			} else {
+				switch( pDoor->state ) {
+				case 0:
+					if( !pDoor->pushable ) {
+						if( within ){
+							pDoor->state = 1;
+						}
+					}
+					break;
+				case 1:
+					pDoor->currentPos += increment;
+					if( pDoor->currentPos > tEnd ) {
+						pDoor->currentPos = tEnd;
+						pDoor->state = 3;
+					}
+					break;
+				case 2:
+					pDoor->currentPos -= increment;
+					if( pDoor->currentPos < tStart ) {
+						pDoor->currentPos = tStart;
+						pDoor->state = 0;
+					}
+					break;
+				default:
+					if( !within ) {
+						pDoor->state = 2;
+					}
+					break;
+				}
 			}
-
-			if(! pDoor->enable ) continue;
-
-			if (
-				 (geVec3d_DistanceBetween(&pDoor->origin, &Temppos) <= pDoor->distanceToOpen) ||
-				 (pDoor->currentPos > tStart)
-			   )
-			{
-				pDoor->currentPos = pDoor->currentPos + speed * TIME * enemyTime; // Move the model's position
-
-				gePath_Sample(Path, pDoor->currentPos, &xfmDest); // Sample the path into xfmDest
-				geWorld_SetModelXForm(world, pDoor->model, &xfmDest); // Render the xfmDest xform.
-	        }
+			
+			gePath_Sample(Path, pDoor->currentPos, &xfmDest); // Sample the path into xfmDest
+			geWorld_SetModelXForm(world, pDoor->model, &xfmDest); // Render the xfmDest xform.
 		}
 	}
 }
@@ -351,6 +523,55 @@ void button_enableByName(geWorld* world, char* name)
 		}
 	}
 }
+
+void delete_buttons(geWorld* world)
+{
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+
+    Set = geWorld_GetEntitySet(world, "Inf_Button");
+	if (Set == NULL) return;
+
+    // enumerate buttons
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_Button *pButton = (Inf_Button*)geEntity_GetUserData(Entity);
+		void* data;
+
+		data = geWorld_ModelGetUserData(pButton->model);
+
+		if( data ){
+			free(data);
+			geWorld_ModelSetUserData(pButton->model, 0);
+		}
+	}
+}
+
+void delete_doors(geWorld* world)
+{
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+
+    Set = geWorld_GetEntitySet(world, "Inf_SimpleDoor");
+	if (Set == NULL) return;
+
+    // enumerate doors
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_SimpleDoor *pDoor = (Inf_SimpleDoor*)geEntity_GetUserData(Entity);
+		void* data;
+
+		data = geWorld_ModelGetUserData(pDoor->model);
+
+		if( data ) {
+			free(data);
+			geWorld_ModelSetUserData(pDoor->model, 0);
+		}
+	}
+}
+
 void button_disableByName(geWorld* world, char* name)
 {
     geEntity_EntitySet	*Set;
@@ -371,14 +592,13 @@ void button_disableByName(geWorld* world, char* name)
 	}
 }
 
-int button_useEntity(geWorld_Model* model){
-	void* data = 0;
+int button_useEntity(void* data){
 	Inf_Button *button;
-	data = geWorld_ModelGetUserData(model); 
 
-	if( !data ) return ENTITY_ERROR;
+	if( !data ) return ENTITY_NO_USABLE_ENTETIES;
+
 	button = (Inf_Button*)data;
-	if( !button ) return ENTITY_ERROR;
+	if( !button ) return ENTITY_NO_USABLE_ENTETIES;
 
 	if(! button->enabled ) return ENTITY_DISABLED;
 
@@ -403,20 +623,86 @@ int button_useEntity(geWorld_Model* model){
 	return ENTITY_RUN;
 }
 
-void new_entities( geWorld* world)
+int door_useEntity(void* data){
+	Inf_SimpleDoor *door;
+
+	if( !data ) return ENTITY_NO_USABLE_ENTETIES;
+	door = (Inf_SimpleDoor*)data;
+	if( !door ) return ENTITY_NO_USABLE_ENTETIES;
+
+	if( door->pushable && !door->optimized ) {
+		if( door->state == 0 ) {
+			door->state = 1;
+		}
+		else {
+			return ENTITY_DISABLED;
+		}
+	} else {
+		return ENTITY_NO_USABLE_ENTETIES;
+	}
+
+	return ENTITY_RUN;
+}
+
+geBoolean door_canUseEntity(void* data){
+	Inf_SimpleDoor *door;
+
+	if( !data ) return GE_FALSE;
+	door = (Inf_SimpleDoor*)data;
+	if( !door ) return GE_FALSE;
+
+	if( door->pushable && !door->optimized ) {
+		if( door->state == 0 ) {
+		}
+		else {
+			return GE_FALSE;
+		}
+	} else {
+		return GE_FALSE;
+	}
+
+	return GE_TRUE;
+}
+
+geBoolean button_canUseEntity(void* data){
+	Inf_Button *button;
+
+	if( !data ) return GE_FALSE;
+	button = (Inf_Button*)data;
+	if( !button ) return GE_FALSE;
+
+	if(! button->enabled ) return GE_FALSE;
+
+	return GE_TRUE;
+}
+
+geBoolean new_entities( geWorld* world)
 {
+	geBoolean status = GE_TRUE;
+
 	new_commandEntity(world);
-	new_button(world);
+	if(! new_button(world) ){
+		status = GE_FALSE;
+	}
+	if(! new_doors(world) ){
+		status = GE_FALSE;
+	}
+
+	return status;
 }
 
 void iterate_entities( geVec3d* pos, geWorld* world)
 {
 	iterate_commandEntity(pos, world);
 	iterate_doors(pos, world);
+	iterate_movingEntites(world);
 }
 
 void delete_entities( geWorld* world)
 {
+	if( !World ) return;
+	delete_doors(world);
+	delete_buttons(world);
 }
 
 geVec3d* findPositionByName(geWorld* world, char* name){
@@ -429,21 +715,47 @@ void entity_enableByName(geWorld* world, char* name){
 	commandEntity_enableByName(world, name);
 	simpleDoor_enableByName(world, name);
 	button_enableByName(world, name);
+	enable_movingEntites(world, name);
 }
 
 void entity_disableByName(geWorld* world, char* name){
 	commandEntity_disableByName(world, name);
 	simpleDoor_disableByName(world, name);
 	button_disableByName(world, name);
+	disable_movingEntites(world, name);
 }
 
 int use_entity(geWorld_Model* model){
-	int temp=ENTITY_ERROR;
+	EntityModelConnection* con;
 
-	temp = button_useEntity(model);
-	if( temp != ENTITY_ERROR ) return temp;
+	con = geWorld_ModelGetUserData(model); 
 
-	return ENTITY_NO_USABLE_ENTETIES;
+	if( !con ) return ENTITY_NO_USABLE_ENTETIES;
+
+	switch( con->type ){
+	case TYPE_BUTTON:
+		return button_useEntity(con->data);
+	case TYPE_DOOR:
+		return door_useEntity(con->data);
+	default:
+		return ENTITY_NO_USABLE_ENTETIES;
+	}
+}
+
+geBoolean can_use_entity(geWorld_Model* model){
+	EntityModelConnection* con;
+	con = geWorld_ModelGetUserData(model); 
+
+	if( !con ) return GE_FALSE;
+
+	switch( con->type ){
+	case TYPE_BUTTON:
+		return button_canUseEntity(con->data);
+	case TYPE_DOOR:
+		return door_canUseEntity(con->data);
+	default:
+		return GE_FALSE;
+	}
 }
 
 int handle_Button(SaveFile* file, geWorld* world)
@@ -483,6 +795,7 @@ int handle_SimpleDoor(SaveFile* file, geWorld* world)
 
 		FLOAT( pDoor->currentPos, "Failed to handle pDoor->currentPos" );
 		INT( pDoor->enable, "Failed to handle pDoor->enable" );
+		INT( pDoor->state, "Failed to handle pDoor->state" );
 	}
 
 	return 1;

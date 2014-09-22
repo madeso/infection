@@ -123,7 +123,9 @@ void inf_luaExit(){
 }
 
 char inf_luafile(char* file){
-	lua_dofile(luaVM, file);
+	char finfile[200];
+	sprintf(finfile, ".\\levels\\%s\\LuaScript\\%s", getLevelFileName(), file);
+	lua_dofile(luaVM, finfile);
 	return 1;
 }
 

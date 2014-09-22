@@ -28,13 +28,14 @@ extern "C" {
 
 #define MAX_EFF_ITEMS   1000  // Maximun number of effects
 
-#define EFF_LIGHT       1
-#define EFF_SPRAY       2
-#define EFF_SPRITE      3
-#define EFF_SND         4
-#define EFF_BOLT        5
-#define EFF_CORONA      6
-#define EFF_BLOOD		7
+#define EFF_LIGHT			1
+#define EFF_SPRAY			2
+#define EFF_SPRITE			3
+#define EFF_SND				4
+#define EFF_BOLT			5
+#define EFF_CORONA			6
+#define EFF_BLOOD			7
+#define EFF_ELECTRICBOLT	8
 
 #define EFFECTC_CLIP_LEAF		( 1 << 0 )
 #define EFFECTC_CLIP_LINEOFSIGHT	( 1 << 1 )
@@ -43,6 +44,32 @@ extern "C" {
 #define SPRAY_SOURCE		( 1 << 0 )
 #define SPRAY_DEST		( 1 << 1 )
 #define SPRAY_FOLLOWTAIL	( 1 << 2 )
+
+typedef struct	_Electric_BoltEffect
+{
+	int			beInitialized;
+	int			beNumPoints;
+	geFloat		beWildness;
+
+	/* For rendering */
+	geVec3d		beStart;
+	geVec3d		beEnd;
+
+	/* For generating the geometry */
+	geVec3d	*	beCenterPoints;
+	geVec3d *	beCurrentPoint;
+
+	geFloat		beBaseColors[3];
+	geFloat		beCurrentColors[3];
+	geFloat		beBaseBlue;
+	int			beDecayRate;
+	int			beDominantColor;
+
+	int			beWidth;
+
+	geBitmap	*beBitmap;
+
+}	Electric_BoltEffect;
 
 typedef struct
 {
@@ -65,6 +92,50 @@ typedef enum
 	SSS_RANDOM_SCALE,
 	SSS_SIZE_UP
 } Spray_ScaleStyle;
+
+#define	ELECTRIC_BOLT_REDDOMINANT	0
+#define	ELECTRIC_BOLT_GREENDOMINANT	1
+#define	ELECTRIC_BOLT_BLUEDOMINANT	2
+
+typedef struct _ElectricBolt {
+	geFloat					LastTime;
+	geFloat					LastBoltTime;
+	Electric_BoltEffect		*Bolt;
+	
+	// Public
+	geBoolean imortal;
+	geFloat life;
+
+    geVec3d origin;
+	//Where the other end of the bolt is
+	geVec3d Terminus;
+
+	//Width in texels of the bolt
+    int Width; // def: 8
+
+	//Power of 2.  Number of control points.  Stick to 32, 64, 128.
+    int NumPoints; // def: 64
+
+	//0 or 1.  Whether or not the bolt is continuous, or random
+    int Intermittent; // def: 1
+
+	//If the bolt is intermittent, the minimum time in seconds between zaps
+    geFloat MinFrequency; // def: 4.0
+
+	//If the bolt is intermittent, the maximum time in seconds between zaps
+    geFloat MaxFrequency; // def: 1.0
+
+	//Degree of 'freneticity' of the bolt (0 to 1)
+    geFloat Wildness; // def: 0.5
+
+	//Specifies the dominant color of the bolt. 0 = Red, 1 = Green, 2 = Blue
+    int DominantColor; // def: 2
+
+	//Base color of the bolt.  The two non-dominant color values MUST be the same!
+    GE_RGBA Color; // def: 160.0 160.0 255.0
+
+	geBitmap* Texture;
+} ElectricBolt;
 
 typedef struct
 {
@@ -297,5 +368,10 @@ void *EM_Blood_Add(Eff_Manager *EM, void *Data);
 void EM_Blood_Remove(Eff_Manager *EM, Blood *Data);
 geBoolean EM_Blood_Process(Eff_Manager *EM, Blood *Data,  float  TimeDelta);
 geBoolean EM_Blood_Modify(Eff_Manager *EM, Blood *Data, Blood *NewData, uint32 Flags);
+
+void *EM_EBolt_Add(Eff_Manager *EM, void *Data);
+void EM_EBolt_Remove(Eff_Manager *EM, ElectricBolt *Data);
+geBoolean EM_EBolt_Process(Eff_Manager *EM, ElectricBolt  *Data,  float  TimeDelta);
+void EM_EBolt_Pause(Eff_Manager *EM, ElectricBolt *Data, geBoolean Pause );
 
 #endif

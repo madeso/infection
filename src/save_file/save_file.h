@@ -15,4 +15,7 @@ char* sf_getLastError();
 #define INT(value, message)		if(! sf_handleInteger(file, &value) )	{cerrorx(message, sf_getLastError()); return 0;}
 #define UCHAR(value, message)	if(! sf_handleUchar(file, &value) )		{cerrorx(message, sf_getLastError()); return 0;}
 
+#define VECTOR(value, message)		if(! handle_Vector(file, &value) )	{error(message); return 0;}
+#define VECTORPTR(value, message)		if(! handle_Vector(file, value) )	{error(message); return 0;}
+
 #endif

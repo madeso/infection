@@ -26,8 +26,6 @@ extern "C" {
 
 typedef struct Particle Particle;
 
-typedef geBoolean COLLISION_CALLBACK(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to);
-
 typedef struct	Particle
 {
 	GE_LVertex		ptclVertex;
@@ -48,10 +46,6 @@ typedef struct	Particle
 	geBoolean UseSizeUp;
 	float ScaleFrom;
 	float ScaleTo;
-	
-	geExtBox box;
-	// if it returns GE_TRUE the particle will be killed the next frame, to move the particle change the from vector
-	COLLISION_CALLBACK *fn_collisionCallback;
 }	Particle;
 
 typedef	struct	Particle_System
@@ -74,8 +68,7 @@ void 	Particle_SystemDestroy(Particle_System *ps);
 void 	Particle_SystemFrame(Particle_System *ps, geFloat DeltaTime);
 geBoolean Particle_SystemRemoveAnchorPoint(Particle_System *ps, geVec3d	*AnchorPoint );
 
-void 	Particle_SystemAddParticle(
-								   Particle_System		*ps,
+void 	Particle_SystemAddParticle(Particle_System		*ps,
 								   geBitmap	*Texture,
 								   const GE_LVertex	*Vert,
 								   const geVec3d		*AnchorPoint,
@@ -84,9 +77,7 @@ void 	Particle_SystemAddParticle(
 								   float				Scale,
 								   float				ScaleTo,
 								   geBoolean			DoScale,
-								   const geVec3d		*Gravity,
-								   COLLISION_CALLBACK	*cb,
-								   geExtBox				*bb);
+								   const geVec3d		*Gravity );
 
 
 #endif

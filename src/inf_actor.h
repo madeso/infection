@@ -9,6 +9,7 @@ enemy actor definitions holder and convinient functions for load ing and destroy
 #define INF_ACTOR_H
 
 geActor_Def *enemy_rat_def;
+geActor_Def *enemy_zombie_def;
 
 geActor_Def* LoadActorDef(char* fileName);
 geActor* LoadActor(geActor_Def* def, geWorld* World, float scale, uint32 flags, geXForm3d* xf);

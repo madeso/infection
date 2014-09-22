@@ -38,6 +38,7 @@
 #include "inf_lua.h"
 #include "inventory.h"
 #include "inf_meny.h"
+#include "sound_modder.h"
 
 #define START_SCREEN_NUMBER				0
 
@@ -373,6 +374,7 @@ geBoolean Init(HWND hWnd)
 	cheats.materialPrint = GE_FALSE;
 	cheats.texturePrint = GE_FALSE;
 	cheats.bouncy = GE_FALSE;
+	cheats.bbox = GE_FALSE;
 
 	hero_hit_points = 100;
 	hero_armor_points = 100;
@@ -389,6 +391,13 @@ geBoolean Init(HWND hWnd)
 	keys[ controls.jump]= GE_FALSE;
 
 	player_is_alive = GE_TRUE;
+
+	if( loadingImage ){
+		printLog("Loading image is not null!\n");
+	}
+	else {
+		printLog("Loading image is null\n");
+	}
 
 	loadingImage = loadBitmapEx(".\\gfx\\loading.bmp", Width, Height, Engine);
 	if( !loadingImage )
@@ -589,8 +598,9 @@ geBoolean LoadPrefs(char *drv, int *width, int *height, char* fullscreen, Option
 	options->meterfog = 5.0f;
 	sprintf(options->startLevel, "start.bsp" );
 	options->weaponFlash = GE_FALSE;
-	options->currentCrosshair = 0;
 	options->invertSpeakers = 0;
+	options->crosshairNormal = 0;
+	options->crosshairOver = 1;
 
 	mouse_x_sensitivity = real_mouse_x_sensitivity = 1.45f;//mouse_sensitivity
 	mouse_y_sensitivity = real_mouse_y_sensitivity = 1.45f;//mouse_sensitivity
@@ -714,9 +724,13 @@ geBoolean LoadPrefs(char *drv, int *width, int *height, char* fullscreen, Option
 				options->log = t?1:0;
 				sprintf(str, "Got the log: %d.\n", options->log);
 				printLog(str);
-			} else if( strcmp(type, "<CROSSHAIR>") == 0) {
-				sscanf(data, "%d", &(options->currentCrosshair));
-				sprintf(str, "Got the crosshair: %d.\n", options->currentCrosshair);
+			} else if( strcmp(type, "<COVER>") == 0) {
+				sscanf(data, "%d", &(options->crosshairOver));
+				sprintf(str, "Got the crosshair over: %d.\n", options->crosshairOver);
+				printLog(str);
+			} else if( strcmp(type, "<CNORMAL>") == 0) {
+				sscanf(data, "%d", &(options->crosshairNormal));
+				sprintf(str, "Got the crosshair normal: %d.\n", options->crosshairNormal);
 				printLog(str);
 			} else if( strcmp(type, "<GAMMA>") == 0) {
 				sscanf(data, "%f", &(options->gamma));
@@ -1003,7 +1017,7 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 	geVFile *Level;
 	char Filename[200];
 	
-	sprintf(Filename, ".//levels//%s", baseFileName ); // levels must be in the level directory
+	sprintf(Filename, ".\\levels\\%s\\level.bsp", baseFileName ); // levels must be in the level directory
 
 	//-------------------------
 	//Loading level into engine
@@ -1092,6 +1106,7 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 	enemy_newWorld( World );
 	printLog("Initializing entities");
 	new_entities(World);
+	weapon_newWorld( World );
 
 
 	printLog("Enabeling decals.\n");
@@ -1128,6 +1143,8 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 
 	if( !fromLoad )
 		level_save();
+
+	sm_init();
 
 	printLog("LoadLevel returned successful.\n");
 
@@ -1178,6 +1195,7 @@ void ShutDown()
 	{
 		printLog("Removing loadingImage.\n");
 		geEngine_RemoveBitmap(Engine, loadingImage);
+		printLog("Destroying loadingImage.\n");
 		geBitmap_Destroy(&loadingImage);
 	}
 
@@ -1252,7 +1270,8 @@ geBoolean SavePrefs()
 	fprintf(f, "# Extended log? only for extreme debugging, and crash determing.\n");
 	fprintf(f, "<EXTENDED_LOG> %d \n", options.extended_log );
 	fprintf(f, "# Should we log? \n");	fprintf(f, "<LOG> %d \n", options.log );
-	fprintf(f, "# The current crosshair? \n");	fprintf(f, "<CROSSHAIR> %d \n", options.currentCrosshair );
+	fprintf(f, "# The current crosshair normal? \n");	fprintf(f, "<CNORMAL> %d \n", options.crosshairNormal );
+	fprintf(f, "# The current crosshair over? \n");	fprintf(f, "<COVER> %d \n", options.crosshairOver );
 	fprintf(f, "# The gamma of the application \n");		fprintf(f, "<GAMMA> %f \n", options.gamma );
 	fprintf(f, "# Clear screen to black before each render. \n");	fprintf(f, "<CLEAR_SCREEN> %d \n", options.clearScreen == GE_TRUE );
 	fprintf(f, "# Fog in water? Disabled by default\n");	fprintf(f, "<FOG_IN_WATER> %d \n", options.fogInWater );

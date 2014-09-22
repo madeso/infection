@@ -23,7 +23,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <windows.h>
-
+#include <math.h>
+#include <assert.h>
 
 #include "useful_macros.h"
 
@@ -105,6 +106,11 @@ EM_Destroy(Eff_Manager *EM)
 				EM->Item[i].Active=GE_FALSE;
 				EM->Item[i].Pause=GE_FALSE;
 				break;
+			case EFF_ELECTRICBOLT:
+				EM_EBolt_Remove(EM, (ElectricBolt*)EM->Item[i].Data);
+				EM->Item[i].Active=GE_FALSE;
+				EM->Item[i].Pause=GE_FALSE;
+				break;
 			case EFF_CORONA:
 				EM_Corona_Remove(EM, (EffCorona *)EM->Item[i].Data);
 				EM->Item[i].Active=GE_FALSE;
@@ -183,6 +189,13 @@ geBoolean EM_Tick(Eff_Manager *EM, float dwTicks)
 					EM->Item[i].Active=GE_FALSE;
 				}
 				break;
+			case EFF_ELECTRICBOLT:
+				if(EM_EBolt_Process(EM, (ElectricBolt*)EM->Item[i].Data,  dwTicks)==GE_FALSE)
+				{
+					EM_EBolt_Remove(EM, (ElectricBolt*)EM->Item[i].Data);
+					EM->Item[i].Active=GE_FALSE;
+				}
+				break;
 			case EFF_CORONA:
 				if(EM_Corona_Process(EM, (EffCorona  *)EM->Item[i].Data,  dwTicks)==GE_FALSE)
 				{
@@ -256,6 +269,11 @@ int EM_Item_Add(Eff_Manager *EM, int Itype, void *Idata)
 				break;
 			case EFF_BOLT:
 				EM->Item[i].Data=EM_Bolt_Add(EM, Idata);
+				EM->Item[i].Active=GE_TRUE;
+				return i;
+				break;
+			case EFF_ELECTRICBOLT:
+				EM->Item[i].Data=EM_EBolt_Add(EM, Idata);
 				EM->Item[i].Active=GE_TRUE;
 				return i;
 				break;
@@ -349,6 +367,10 @@ void EM_Item_Delete(Eff_Manager *EM, int Itype, int Index)
 			break;
 		case EFF_BOLT:
 			EM_Bolt_Remove(EM, (Bolt *)EM->Item[Index].Data);
+			EM->Item[Index].Active=GE_FALSE;
+			break;
+		case EFF_ELECTRICBOLT:
+			EM_EBolt_Remove(EM, (ElectricBolt *)EM->Item[Index].Data);
 			EM->Item[Index].Active=GE_FALSE;
 			break;
 		case EFF_CORONA:
@@ -595,7 +617,7 @@ geBoolean EM_Spray_Process(Eff_Manager *EM, Spray  *Data,  float  TimeDelta)
 				UnitLife,
 				&Velocity,
 				ScaleFrom, 0.0f, GE_FALSE,
-				Data->ParticleGravity );
+				Data->ParticleGravity, 0, 0 );
 		else
 			Particle_SystemAddParticle(EM->Ps,
 				Data->Texture,
@@ -604,7 +626,7 @@ geBoolean EM_Spray_Process(Eff_Manager *EM, Spray  *Data,  float  TimeDelta)
 				UnitLife,
 				&Velocity,
 				ScaleFrom, ScaleTo, GE_TRUE,
-				Data->ParticleGravity );
+				Data->ParticleGravity, 0, 0 );
 	}
 	
 	// all done
@@ -639,11 +661,11 @@ geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direct
 		Particle_SystemAddParticle(EM->Ps,
 				image,
 				&vertex,
-				0,//&location,
+				0,
 				life,
 				&velocity,
 				scale, 0.0f, GE_FALSE,
-				&gravity );
+				&gravity, 0, 0 );
 	}
 
 	return GE_TRUE;
@@ -2161,3 +2183,487 @@ static geBoolean EffectC_IsPointVisible(geWorld *World, geCamera *Camera, geVec3
 	
 } // EffectC_IsPointVisible()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//---------------------------------------------------------------------
+// Bolt
+//---------------------------------------------------------------------
+
+Electric_BoltEffect * Electric_BoltEffectCreate(
+	geBitmap				*Texture,	/* The texture we map onto the bolt */
+	geBitmap				*Texture2,	/* The texture we map onto the bolt */
+	int 					NumPolys,	/* Number of polys, must be power of 2 */
+	int						Width,		/* Width in world units of the bolt */
+	geFloat 				Wildness);	/* How wild the bolt is (0 to 1 inclusive) */
+
+void Electric_BoltEffectDestroy(Electric_BoltEffect *Effect);
+
+void Electric_BoltEffectAnimate(
+	Electric_BoltEffect *	Effect,
+	const geVec3d *			start,		/* Starting point of the bolt */
+	const geVec3d *			end);		/* Ending point of the bolt */
+
+void Electric_BoltEffectRender(
+	geWorld *				World,		/* World to render for */
+	Electric_BoltEffect *	Effect,		/* Bolt to render */
+	const geXForm3d *		XForm);		/* Transform of our point of view */
+
+void Electric_BoltEffectSetColorInfo(
+	Electric_BoltEffect *	Effect,
+	GE_RGBA *				BaseColor,		/* Base color of the bolt (2 colors should be the same */
+	int						DominantColor);	/* Which color is the one to leave fixed */
+
+static int logBase2(int n) {
+	int	i = 0;
+
+	assert(n != 0);
+
+	while	(!(n & 1)) {
+		n = n >> 1;
+		i++;
+	}
+	assert((n & ~1) == 0);
+	return i;
+}
+
+static geBoolean IsPowerOf2(int n) {
+	if	(n == 0)
+		return GE_TRUE;
+	while	(!(n & 1))
+		n = n >> 1;
+	if	(n & ~1)
+		return GE_FALSE;
+	return GE_TRUE;
+}
+
+Electric_BoltEffect * Electric_BoltEffectCreate(
+	geBitmap		*Bitmap,
+	geBitmap		*Bitmap2,
+ 	int NumPolys,
+ 	int Width,
+	geFloat Wildness)
+{
+	Electric_BoltEffect *	be;
+	GE_RGBA					color;
+
+	assert(Wildness >= 0.0f && Wildness <= 1.0f);
+
+	/* Asserts power of 2 */
+	logBase2(NumPolys);
+
+	be = (Electric_BoltEffect *)malloc(sizeof(*be));
+	if	(!be)
+		return be;
+
+	memset(be, 0, sizeof(*be));
+
+	be->beCenterPoints = (geVec3d *)malloc(sizeof(*be->beCenterPoints) * (NumPolys + 1));
+	if	(!be->beCenterPoints)
+		goto fail;
+
+	be->beBitmap	= Bitmap;
+//	be->beBitmap2	= Bitmap2;
+	be->beNumPoints	= NumPolys;
+	be->beWildness	= Wildness;
+	be->beWidth		= Width;
+
+//	color.r = 255.0f;
+//	color.g = 60.0f;
+//	color.b = 60.0f;
+//	Electric_BoltEffectSetColorInfo(be, &color, ELECTRIC_BOLT_REDDOMINANT);
+
+//	color.r = 60.0f;
+//	color.g = 255.0f;
+//	color.b = 60.0f;
+//	Electric_BoltEffectSetColorInfo(be, &color, ELECTRIC_BOLT_GREENDOMINANT);
+
+	color.r = 160.0f;
+	color.g = 160.0f;
+	color.b = 255.0f;
+	Electric_BoltEffectSetColorInfo(be, &color, ELECTRIC_BOLT_BLUEDOMINANT);
+
+	return be;
+
+fail:
+	if	(be->beCenterPoints)
+		free(be->beCenterPoints);
+	return NULL;
+}
+
+void Electric_BoltEffectDestroy(Electric_BoltEffect *Effect) {
+	free(Effect->beCenterPoints);
+	free(Effect);
+}
+
+static geFloat GaussRand(void) {
+	int	i;
+	int	r;
+
+	r = 0;
+
+	for	(i = 0; i < 6; i++)
+		r = r + rand() - rand();
+
+	return (geFloat)r / ((geFloat)RAND_MAX * 6.0f);
+}
+
+static void subdivide(
+	Electric_BoltEffect *	be,
+	const geVec3d *			start,
+	const geVec3d *			end,
+	geFloat 				s,
+	int 					n)
+{
+	geVec3d	tmp;
+
+	if	(n == 0) {
+		be->beCurrentPoint++;
+		*be->beCurrentPoint = *end;
+		return;
+	}
+	
+	tmp.X = (end->X + start->X) / 2 + s * GaussRand();
+	tmp.Y = (end->Y + start->Y) / 2 + s * GaussRand();
+	tmp.Z = (end->Z + start->Z) / 2 + s * GaussRand();
+	subdivide(be,  start, &tmp, s / 2, n - 1);
+	subdivide(be, &tmp,    end, s / 2, n - 1);
+}
+
+#define	LIGHTNINGWIDTH 8.0f
+
+static	void	genLightning(
+	Electric_BoltEffect *	be,
+	int 					RangeLow,
+	int 					RangeHigh,
+	const geVec3d *			start,
+	const geVec3d *			end)
+{
+	geFloat	length;
+	int		seed;
+
+	assert(be);
+	assert(start);
+	assert(end);
+	assert(RangeHigh > RangeLow);
+	assert(IsPowerOf2(RangeHigh - RangeLow));
+
+	/* Manhattan length is good enough for this */
+	length = (geFloat)(fabs(start->X - end->X) +
+						fabs(start->Y - end->Y) +
+						fabs(start->Z - end->Z));
+
+	seed = rand();
+
+	srand(seed);
+	be->beCurrentPoint					= be->beCenterPoints + RangeLow;
+	be->beCenterPoints[RangeLow]		= *start;
+	be->beCenterPoints[RangeHigh] 		= *end;
+//	be->beCenterPoints[be->beNumPoints] = *end;
+//	subdivide(be, start, end, length * be->beWildness, logBase2(be->beNumPoints));
+	subdivide(be, start, end, length * be->beWildness, logBase2(RangeHigh - RangeLow));
+}
+
+void Electric_BoltEffectSetColorInfo(
+	Electric_BoltEffect *	Effect,
+	GE_RGBA *				BaseColor,
+	int						DominantColor)
+{
+	Effect->beBaseColors[0]		= BaseColor->r;
+	Effect->beBaseColors[1]		= BaseColor->g;
+	Effect->beBaseColors[2]		= BaseColor->b;
+	Effect->beCurrentColors[0]	= BaseColor->r;
+	Effect->beCurrentColors[1]	= BaseColor->g;
+	Effect->beCurrentColors[2]	= BaseColor->b;
+	Effect->beDominantColor 	= DominantColor;
+}
+
+void Electric_BoltEffectAnimate(
+	Electric_BoltEffect *	Effect,
+	const geVec3d *			start,
+	const geVec3d *			end)
+{
+	int		dominant;
+	int		nonDominant1;
+	int		nonDominant2;
+	geVec3d	SubdivideStart;
+	geVec3d	SubdivideEnd;
+	int		LowIndex;
+	int		HighIndex;
+
+	Effect->beStart = *start;
+	Effect->beEnd	= *end;
+
+	dominant = Effect->beDominantColor;
+	nonDominant1 = (dominant + 1) % 3;
+	nonDominant2 = (dominant + 2) % 3;
+	if	(Effect->beBaseColors[nonDominant1] == Effect->beCurrentColors[nonDominant1]) {
+		int	DecayRate;
+		int	Spike;
+
+		DecayRate = rand() % (int)(Effect->beBaseColors[dominant] - Effect->beBaseColors[nonDominant1]);
+		DecayRate = max(DecayRate, 5);
+		Effect->beDecayRate = DecayRate;
+		if	(Effect->beBaseColors[nonDominant1] >= 1.0f)
+			Spike = rand() % (int)(Effect->beBaseColors[nonDominant1]);
+		else
+			Spike = 0;
+		Effect->beCurrentColors[nonDominant1] -= Spike;
+		Effect->beCurrentColors[nonDominant2] -= Spike;
+	}
+	else {
+		Effect->beCurrentColors[nonDominant1] += Effect->beDecayRate;
+		Effect->beCurrentColors[nonDominant2] += Effect->beDecayRate;
+		if	(Effect->beCurrentColors[nonDominant1] > Effect->beBaseColors[nonDominant1])
+		{
+			Effect->beCurrentColors[nonDominant1] = Effect->beBaseColors[nonDominant1];
+			Effect->beCurrentColors[nonDominant2] = Effect->beBaseColors[nonDominant2];
+		}
+	}
+
+	if	(Effect->beInitialized && Effect->beNumPoints > 16) {
+		int		P1;
+		int		P2;
+		int		P3;
+		int		P4;
+
+		switch	(rand() % 7) {
+			case	0:
+				genLightning(Effect, 0, Effect->beNumPoints, start, end);
+				return;
+
+			case	1:
+			case	2:
+			case	3:
+				P1 = 0;
+				P2 = Effect->beNumPoints / 2;
+				P3 = P2 + Effect->beNumPoints / 4;
+				P4 = Effect->beNumPoints;
+				break;
+
+			case	4:
+			case	5:
+			case	6:
+				P1 = 0;
+				P3 = Effect->beNumPoints / 2;
+				P2 = P3 - Effect->beNumPoints / 4;
+				P4 = Effect->beNumPoints;
+				break;
+		}
+		SubdivideStart = Effect->beCenterPoints[P1];
+		SubdivideEnd = Effect->beCenterPoints[P2];
+		genLightning(Effect, P1, P2, &SubdivideStart, &SubdivideEnd);
+		SubdivideStart = Effect->beCenterPoints[P2];
+		SubdivideEnd = Effect->beCenterPoints[P3];
+		genLightning(Effect, P2, P3, &SubdivideStart, &SubdivideEnd);
+		SubdivideStart = Effect->beCenterPoints[P3];
+		SubdivideEnd = Effect->beCenterPoints[P4];
+		genLightning(Effect, P3, P4, &SubdivideStart, &SubdivideEnd);
+	}
+	else
+	{
+		Effect->beInitialized = 1;
+		LowIndex = 0;
+		HighIndex = Effect->beNumPoints;
+		SubdivideStart = *start;
+		SubdivideEnd   = *end;
+
+		genLightning(Effect, LowIndex, HighIndex, &SubdivideStart, &SubdivideEnd);
+	}
+}
+
+#if 0
+static	void	DrawPoint(geWorld *world, geVec3d *pos, geBitmap *Bitmap, int r, int g, int b)
+{
+	GE_LVertex	vert;
+
+	vert.X = pos->X;
+	vert.Y = pos->Y;
+	vert.Z = pos->Z;
+	vert.r = (geFloat)r;
+	vert.g = (geFloat)g;
+	vert.b = (geFloat)b;
+	vert.a = 255.0f;
+	vert.u = vert.v = 0.0f;
+
+	GE_WorldAddPolyOnce(world,
+						&vert,
+						1,
+						Bitmap,
+						GE_TEXTURED_POINT,
+						GE_FX_TRANSPARENT,
+						EffectScale);
+}
+#endif
+
+#define	LIGHTNINGALPHA	160.0f
+#define	LIGHTNINGSTROKEDURATION	0.05f
+
+void Electric_BoltEffectRender(
+	geWorld *				World,
+	Electric_BoltEffect *	be,
+	const geXForm3d *		XForm)
+{
+	geVec3d			perp;
+	geVec3d			temp;
+	geVec3d			in;
+	GE_LVertex 		verts[4];
+	int				i;
+
+	geVec3d_Subtract(&be->beStart, &be->beEnd, &temp);
+	geXForm3d_GetIn(XForm, &in);
+
+	geVec3d_CrossProduct(&in, &temp, &perp);
+	geVec3d_Normalize(&perp);
+
+	geVec3d_Scale(&perp, be->beWidth / 2.0f, &perp);
+
+	/*
+		We've got the perpendicular to the camera in the
+		rough direction of the electric bolt center.  Walk
+		the left and right sides, constructing verts, then
+		do the drawing.
+	*/
+	for	(i = 0; i < be->beNumPoints - 1; i++) {
+		geVec3d	temp;
+
+		geVec3d_Subtract(&be->beCenterPoints[i], &perp, &temp);
+		verts[0].X = temp.X;
+		verts[0].Y = temp.Y;
+		verts[0].Z = temp.Z;
+		verts[0].u = 0.0f;
+		verts[0].v = 0.0f;
+		verts[0].r = be->beCurrentColors[0];
+		verts[0].g = be->beCurrentColors[1];
+		verts[0].b = be->beCurrentColors[2];
+		verts[0].a = LIGHTNINGALPHA;
+
+		geVec3d_Subtract(&be->beCenterPoints[i + 1], &perp, &temp);
+		verts[1].X = temp.X;
+		verts[1].Y = temp.Y;
+		verts[1].Z = temp.Z;
+		verts[1].u = 0.0f;
+		verts[1].v = 1.0f;
+		verts[1].r = be->beCurrentColors[0];
+		verts[1].g = be->beCurrentColors[1];
+		verts[1].b = be->beCurrentColors[2];
+		verts[1].a = LIGHTNINGALPHA;
+
+		geVec3d_Add(&be->beCenterPoints[i + 1], &perp, &temp);
+		verts[2].X = temp.X;
+		verts[2].Y = temp.Y;
+		verts[2].Z = temp.Z;
+		verts[2].u = 1.0f;
+		verts[2].v = 1.0f;
+		verts[2].r = be->beCurrentColors[0];
+		verts[2].g = be->beCurrentColors[1];
+		verts[2].b = be->beCurrentColors[2];
+		verts[2].a = LIGHTNINGALPHA;
+
+		geVec3d_Add(&be->beCenterPoints[i], &perp, &temp);
+		verts[3].X = temp.X;
+		verts[3].Y = temp.Y;
+		verts[3].Z = temp.Z;
+		verts[3].u = 1.0f;
+		verts[3].v = 0.0f;
+		verts[3].r = be->beCurrentColors[0];
+		verts[3].g = be->beCurrentColors[1];
+		verts[3].b = be->beCurrentColors[2];
+		verts[3].a = LIGHTNINGALPHA;
+
+		geWorld_AddPolyOnce(World,
+							verts,
+							4,
+							be->beBitmap,
+							GE_TEXTURED_POLY,
+							GE_RENDER_DO_NOT_OCCLUDE_OTHERS,
+							1.0f);
+
+//		DrawPoint(World, &be->beCenterPoints[i], be->beTexture, 255, 0, 0);
+	}
+}
+
+static geFloat frand(geFloat Low, geFloat High) {
+	geFloat	Range;
+	Range = High - Low;
+	return ((geFloat)(((rand() % 1000) + 1))) / 1000.0f * Range + Low;
+}
+
+void *EM_EBolt_Add(Eff_Manager *EM, void *Data) {
+	ElectricBolt* bolt;
+	bolt = (ElectricBolt*) malloc( sizeof(ElectricBolt) );
+	if( !bolt) return 0;
+	memcpy(bolt, Data, sizeof(ElectricBolt) );
+	bolt->Bolt = Electric_BoltEffectCreate(bolt->Texture, NULL, bolt->NumPoints, bolt->Width, bolt->Wildness);
+	if( bolt->Bolt == NULL ) {
+		free(bolt);
+		return NULL;
+	}
+	Electric_BoltEffectSetColorInfo(bolt->Bolt, &bolt->Color, bolt->DominantColor);
+	return bolt;
+}
+
+void EM_EBolt_Remove(Eff_Manager *EM, ElectricBolt *bolt) {	
+	Electric_BoltEffectDestroy(bolt->Bolt);
+	bolt->Bolt = 0;
+	free(bolt);
+}
+
+geBoolean EM_EBolt_Process(Eff_Manager *EM, ElectricBolt  *bolt,  float  TimeDelta) {
+	int32 Leaf;
+	geVec3d MidPoint;
+	const geXForm3d		*CameraXf;
+	CameraXf = geCamera_GetWorldSpaceXForm( EM->Camera );
+
+	geVec3d_Subtract(&bolt->Terminus, &bolt->origin, &MidPoint);
+	geVec3d_AddScaled(&bolt->origin, &MidPoint, 0.5f, &MidPoint);
+	geWorld_GetLeaf(EM->World, &MidPoint, &Leaf);
+
+	if (geWorld_MightSeeLeaf(EM->World, Leaf))	{
+		bolt->LastTime += TimeDelta;
+
+		if	(!bolt->Intermittent ||  (bolt->LastTime - bolt->LastBoltTime > frand(bolt->MaxFrequency, bolt->MinFrequency))) {
+			Electric_BoltEffectAnimate(bolt->Bolt,
+									   &bolt->origin,
+									   &bolt->Terminus);
+			bolt->LastBoltTime = bolt->LastTime;
+		}
+
+		if	(bolt->LastTime - bolt->LastBoltTime <= LIGHTNINGSTROKEDURATION)
+			Electric_BoltEffectRender(EM->World, bolt->Bolt, CameraXf);
+
+		if ( ! bolt->imortal ) {
+			bolt->life -= TimeDelta;
+			if( bolt->life < 0 ) return GE_FALSE;
+		}
+	}
+
+	return GE_TRUE;
+}
+void EM_EBolt_Pause(Eff_Manager *EM, ElectricBolt *Data, geBoolean Pause ) {	
+}

@@ -614,7 +614,8 @@ void DecalMgr_Clear(DecalMgr *dMgr)
 		
 	for (i = 0; i < NUM_DECALS; i++)
 	{
-		if (dMgr->dcl[i]->Visible != GE_TRUE)
+		//if (dMgr->dcl[i]->Visible != GE_TRUE)
+		if (dMgr->dcl[i]->bAdded != GE_TRUE)
 			continue;
 		
 		{

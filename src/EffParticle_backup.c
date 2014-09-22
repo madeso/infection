@@ -29,7 +29,6 @@
 #define	PARTICLE_USER			( 1 << 0 )
 #define	PARTICLE_HASVELOCITY	( 1 << 1 )
 #define PARTICLE_HASGRAVITY		( 1 << 2 )
-#define PARTICLE_HASCOLL		( 1 << 3 )
 #define PARTICLE_RENDERSTYLE	GE_RENDER_DEPTH_SORT_BF | GE_RENDER_DO_NOT_OCCLUDE_OTHERS
 
 
@@ -188,26 +187,7 @@ void 	Particle_SystemFrame(Particle_System *ps, geFloat DeltaTime)
 				// apply DeltaPos to particle position
 				if (( ptcl->ptclFlags & PARTICLE_HASVELOCITY ) || ( ptcl->ptclFlags & PARTICLE_HASGRAVITY ) )
 				{
-					geVec3d* pos = (geVec3d *)&( ptcl->ptclVertex.X );
-					geVec3d newPos;
-					geBoolean update = GE_TRUE;
-					
-					if( ptcl->ptclFlags & PARTICLE_HASCOLL ){
-						geBoolean result;
-						GE_Collision lCol;
-						geVec3d_Add( pos, &DeltaPos, &newPos);
-						result = geWorld_Collision(ps->psWorld, &(ptcl->box.Min), &(ptcl->box.Max),
-							pos,&newPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff, 0 ,NULL, &lCol);
-						if( result ) {
-							update = GE_FALSE;
-							result = ptcl->fn_collisionCallback(ptcl, &lCol, pos, &newPos);
-							if( result )
-								ptcl->ptclTime = 0.0f;
-						}
-					}
-					
-					if( update )
-						geVec3d_Add( pos, &DeltaPos, pos );
+					geVec3d_Add( (geVec3d *)&( ptcl->ptclVertex.X ), &DeltaPos, (geVec3d *)&( ptcl->ptclVertex.X ) );
 				}
 				
 				// make the particle follow its anchor point if it has one
@@ -311,9 +291,7 @@ void 	Particle_SystemAddParticle(
 								   float				Scale,
 								   float				ScaleTo,
 								   geBoolean			DoScale,
-								   const geVec3d		*Gravity,
-								   COLLISION_CALLBACK	*cb,
-								   geExtBox				*bb)
+								   const geVec3d		*Gravity )
 {
 	
 	// locals
@@ -324,13 +302,6 @@ void 	Particle_SystemAddParticle(
 	if ( !ptcl )
 	{
 		return;
-	}
-
-	if( cb && bb ) {
-		ptcl->ptclFlags |= PARTICLE_HASCOLL;
-		ptcl->fn_collisionCallback = cb;
-		ptcl->box.Min = bb->Min;
-		ptcl->box.Max = bb->Max;
 	}
 	
 	// setup gravity

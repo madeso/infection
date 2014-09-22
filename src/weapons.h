@@ -29,6 +29,8 @@ void weapon_tick();
 //unload all loaded icons
 void weapon_destroy();
 
+void weapon_newWorld(geWorld* world);
+
 //call this evry sec
 void evry_sec();
 

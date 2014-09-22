@@ -32,7 +32,7 @@ geBoolean LoadCrossHair()
 		if(! CrossHair[i] )
 		{
 			ok = GE_FALSE;
-			sprintf(file, "Failed to load #%d\n", i+1);
+			sprintf(file, "Failed to load crosshair #%d\n", i+1);
 			printLog(file);
 			error(file);
 		}
@@ -57,8 +57,8 @@ float getCrosshairScale(){
 	int iw=0, ih=0;
 	float wantedScale;
 
-	iw = geBitmap_Width(CrossHair[options.currentCrosshair]);
-	ih = geBitmap_Height(CrossHair[options.currentCrosshair]);
+	iw = geBitmap_Width(CrossHair[currentCrosshair]);
+	ih = geBitmap_Height(CrossHair[currentCrosshair]);
 	wantedScale = (float)400 / (float)(iw*ih);
 	return wantedScale/3.0f;
 }
@@ -73,11 +73,11 @@ geBoolean DrawCrossHair()
 {
 	uint32 x;
 	uint32 y;
-	x = (Width - geBitmap_Width(CrossHair[options.currentCrosshair]))/2;
-	y = (Height - geBitmap_Height(CrossHair[options.currentCrosshair]))/2;
+	x = (Width - geBitmap_Width(CrossHair[currentCrosshair]))/2;
+	y = (Height - geBitmap_Height(CrossHair[currentCrosshair]))/2;
 
 	//NULL says that we want to render the whole bitmap
-	if( !geEngine_DrawBitmap(Engine, CrossHair[options.currentCrosshair], NULL, x, y) )
+	if( !geEngine_DrawBitmap(Engine, CrossHair[currentCrosshair], NULL, x, y) )
 	{
 		printLog("Failed to draw crosshair.\n");
 		return GE_FALSE;
@@ -113,7 +113,7 @@ geBoolean DrawCrossHair()
 	poly = geWorld_AddPolyOnce(World,
 		&v,
 		1,
-		CrossHair[options.currentCrosshair],
+		CrossHair[currentCrosshair],
 		GE_TEXTURED_POINT,
 		GE_RENDER_DEPTH_SORT_BF,
 		getCrosshairScale() ); 

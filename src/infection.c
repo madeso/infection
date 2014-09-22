@@ -17,13 +17,72 @@
 #define SAVE_VERSION			3
 void setPlayerName(char *playerName);
 
+float redFlashState = 0.0f;
+float maxRedFlashState = 0.0f;
+float blueFlashState = 0.0f;
+float maxBlueFlashState = 0.0f;
+
+void add_redFlash(float power){
+	if( power < 0.01f ) return;
+	if( maxRedFlashState > 4.0f ) return;
+	redFlashState += power;
+	maxRedFlashState += power;
+}
+void add_blueFlash(float power){
+	if( power < 0.01f ) return;
+	if( maxBlueFlashState > 3.0f ) return;
+	blueFlashState += power;
+	maxBlueFlashState += power;
+}
+void renderFlash(){
+	GE_RGBA rgba;
+	if( redFlashState > 0.0f){
+		rgba.r = 255.0f;
+		rgba.g = 0.0f;
+		rgba.b = 0.0f;
+		rgba.a = redFlashState / maxRedFlashState * 255.0f;
+		geEngine_FillRect(Engine, &Rect, &rgba);
+	}
+	if( blueFlashState > 0.0f){
+		rgba.r = 0.0f;
+		rgba.g = 0.0f;
+		rgba.b = 255.0f;
+		rgba.a = blueFlashState / maxBlueFlashState * 255.0f;
+		geEngine_FillRect(Engine, &Rect, &rgba);
+	}
+}
+void iterateFlash(){
+	if( redFlashState > 0.0f ){
+		redFlashState -= TIME;
+		if( redFlashState <= 0.0f ){
+			redFlashState = 0.0f;
+			maxRedFlashState = 0.0f;
+		}
+	}
+	if( blueFlashState > 0.0f ){
+		blueFlashState -= TIME;
+		if( blueFlashState <= 0.0f ){
+			blueFlashState = 0.0f;
+			maxBlueFlashState = 0.0f;
+
+		}
+	}
+}
+void initFlash(){
+	redFlashState= maxRedFlashState = 0.0f;
+	blueFlashState= maxBlueFlashState = 0.0f;
+}
+
 void new_game()
 {
 	setPlayerName("player1");
 	weapon_strip(); // no weapons on a new game
 	hero_hit_points = 100; // full health
 	hero_armor_points = 0; // no armor at the beginning
-	LoadLevel(options.startLevel, 0); // load the start level
+	cleanUpStateBox();
+	if(! LoadLevel(options.startLevel, 0) ){
+		run = GE_FALSE;
+	}
 	player_is_alive = GE_TRUE; // we need to be alive when the game starts
 	Angle.Z = 0.0f; // no tilting
 	// todo free time damage
@@ -34,10 +93,15 @@ int makeSureDirectoryExist(char* directory){
 	geVFile* Directory = 0;
 	Directory = geVFile_OpenNewSystem(NULL, GE_VFILE_TYPE_DOS, directory, NULL, GE_VFILE_OPEN_CREATE|GE_VFILE_OPEN_DIRECTORY); 
 
+	// The directory is null when the directory exists.
+	// Let's comment out this piece of code to avoid
+	// a mass of stupid error messages.
+	/*
+	// @@@ why don't we get a directory
 	if(! Directory ){
 		error("Failed to create player directory");
 		return 0;
-	}
+	}*/
 	return 1;
 }
 
@@ -60,8 +124,6 @@ int handle_Vector(SaveFile* file, geVec3d* value){
 	FLOAT(value->Z, "Failed to handle Z");
 	return 1;
 }
-
-#define VECTOR(value, message)		if(! handle_Vector(file, &value) )	{error(message); return 0;}
 
 int handle_SaveFile(SaveFile* file){
 	UCHAR(hero_hit_points, "Failed to handle hero_hit_points");

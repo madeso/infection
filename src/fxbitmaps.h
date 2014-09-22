@@ -19,6 +19,11 @@ geBitmap	*marbleSprite,
 			*rockSprite,
 			*sandSprite;
 
+geBitmap	*flameSprite,
+			*smokeSprite,
+			*gemSprite,
+			*fireSprite;
+
 typedef enum _smokeEmitterStyle{
 	SES_NORMAL,
 	SES_LARGE,
@@ -37,4 +42,8 @@ void ParticleExplosion(geBitmap* sprite, geVec3d location, geVec3d direction);
 
 void BloodExplosion(geVec3d position);
 void fx_blast(geVec3d from, geVec3d to);
+
+void fx_grenadeExplosion(geVec3d at);
+void fx_fire(geVec3d* at, geBoolean reference);
+void fx_shootFire(geVec3d at, geVec3d direction);
 #endif

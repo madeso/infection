@@ -162,6 +162,10 @@ SOURCE=.\options.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\proposed.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\resources.rc
 # End Source File
 # Begin Source File
@@ -247,6 +251,10 @@ SOURCE=.\multiint.h
 # Begin Source File
 
 SOURCE=.\options.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\proposeg3d.h
 # End Source File
 # Begin Source File
 
@@ -397,6 +405,14 @@ SOURCE=.\ConsoleBuffer.h
 # PROP Default_Filter ""
 # Begin Source File
 
+SOURCE=.\sound_modder.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\sound_modder.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\sound_system.c
 # End Source File
 # Begin Source File
@@ -476,14 +492,6 @@ SOURCE=.\timefx.c
 
 SOURCE=.\timefx.h
 # End Source File
-# Begin Source File
-
-SOURCE=.\weapon.c
-# End Source File
-# Begin Source File
-
-SOURCE=.\weapons.h
-# End Source File
 # End Group
 # Begin Group "Enemies"
 
@@ -507,6 +515,14 @@ SOURCE=.\enemy_rat.c
 # Begin Source File
 
 SOURCE=.\enemy_rat.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\enemy_zombie.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\enemy_zombie.h
 # End Source File
 # End Group
 # Begin Group "FX"
@@ -585,6 +601,102 @@ SOURCE=.\save_file\save_file.c
 SOURCE=.\save_file\save_file.h
 # End Source File
 # End Group
+# Begin Group "Weapons"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\explosions.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\explosions.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\grenade_manager.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\grenade_manager.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\NearestActorContainer.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\NearestActorContainer.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\weapon.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\weapons.h
+# End Source File
+# End Group
+# Begin Group "Include files"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\include\actor.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\include\Basetype.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\G3d\Genesis.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\G3d\getypes.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\include\Vec3d.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\include\Xform3d.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\genesis3d\src\G3d\xtra_g3d.h
+# End Source File
+# End Group
+# Begin Group "files"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=..\files\infection.cfg
+# End Source File
+# Begin Source File
+
+SOURCE=..\files\infection_errors.txt
+# End Source File
+# Begin Source File
+
+SOURCE=..\files\infection_flow.txt
+# End Source File
+# Begin Source File
+
+SOURCE=..\files\luatest.txt
+# End Source File
+# End Group
+# Begin Source File
+
+SOURCE=.\drawbbox.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\drawbbox.h
+# End Source File
 # Begin Source File
 
 SOURCE=.\level.h

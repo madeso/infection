@@ -19,8 +19,7 @@
 #include <math.h>
 
 #include "sound_system.h"
-
-#define IN_DEG(x) (x)*GE_PI/180.0f
+#include "explosions.h"
 
 #define ENEMY_RAT_DETECT_RANGE	922694.0f
 #define ENEMY_RAT_EAT_RANGE		12000.0f
@@ -101,7 +100,7 @@ void enemy_rat_newWorld(geWorld* World)
 		if(! r->ExtBox )
 		{
 			run = 0;
-			error("failed to allocate ExtBox");
+			error("failed to allocate ExtBox for rat");
 			r->ExtBox = 0;
 			continue;
 		}
@@ -113,16 +112,14 @@ void enemy_rat_newWorld(geWorld* World)
 		if(! r->XForm )
 		{
 			run = 0;
-			error("failed to allocate xform");
+			error("failed to allocate rat xform");
 			r->XForm = 0;
 			continue;
 		}
 		memset(r->XForm, 0, sizeof(geXForm3d) );
 		geXForm3d_SetIdentity(r->XForm );
 		
-		r->Orientation.X = IN_DEG(r->Orientation.X);
-		r->Orientation.Y = IN_DEG(r->Orientation.Y);
-		r->Orientation.Z = IN_DEG(r->Orientation.Z);
+		IN_DEG_VECTOR(r->Orientation);
 
 		geXForm3d_RotateX(r->XForm, r->Orientation.X );
 		geXForm3d_RotateY(r->XForm, r->Orientation.Y );
@@ -130,7 +127,7 @@ void enemy_rat_newWorld(geWorld* World)
 		r->XForm->Translation = r->Position;
 
 		r->Actor = LoadActor(enemy_rat_def, World, 2.0f, GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE, r->XForm );
-		r->health = 10;
+		r->health = 2;
 		r->counter = 0.0f;
 		r->preState = r->state = 0;
 
@@ -212,80 +209,6 @@ void enemy_rat_lookFromPos(geVec3d *pos, Inf_Enemy_Rat* r, float time, float spe
 	r->Orientation.Y += rot.Y * time * speed;
 }
 */
-
-float getAngleBetwen(geVec3d a, geVec3d b)
-{
-	float cosangle = 0.0f;
-
-	geVec3d_Normalize(&a);
-	geVec3d_Normalize(&b);
-	
-	cosangle = geVec3d_DotProduct(&a, &b);
-
-	return (float)acos((double)
-		(cosangle)
-		);
-}
-
-void getDirectionVector(geVec3d* from, geVec3d* point, geVec3d* Result)
-{
-	geVec3d_Subtract( from, point, Result );
-}
-
-// @@@ move this function to some smarter place
-void enemy_rat_lookAtPos(geVec3d *pos, Inf_Enemy_Rat* r, float time)
-{
-	// the angle values
-	float a = 0.0f;
-	float b = 0.0f;
-	//float c = 0.0f;
-	//float d = 0.0f;
-	geVec3d dirPosRat;// direction from pos to rat, not normalized
-	geVec3d temp;// temporary vector
-	
-	// Get the wanted direction i a vector
-	getDirectionVector(&r->Position, pos, &dirPosRat);
-	dirPosRat.Y = 0; // make it on the plane
-
-
-
-	geXForm3d_GetIn(r->XForm, &temp); // Get in
-	temp.Y = 0.0f; // on the plane
-	b = getAngleBetwen(dirPosRat, temp); // get the angles
-
-	// This check(ie the return) will cause a slight performance hit
-	// if the enemy is facing towards the point it doesn't need to steer
-	// right now, perhaps later, but since this code is called each frame
-	// we don't take care of that.
-	// idea: if we don't want the enemy to fire while it's turning and the direction 
-	if( b < GE_PI/12 )
-	{
-		//game_message("Don't");
-		return;
-	}
-
-	geXForm3d_GetLeft(r->XForm, &temp); // Get right
-	geVec3d_Scale(&temp, -1.0f, &temp); // make it the inverse
-	temp.Y = 0.0f; // on the plane
-	a = getAngleBetwen(dirPosRat, temp); // gwet the angles
-
-
-	// we only need a, then we don't need to calculate theese 
-	//geXForm3d_GetLeft(r->XForm, &temp); // Get left
-	//temp.Y = 0.0f; // on the plane
-	//c = getAngleBetwen(dirPosRat, temp); // get the angles
-
-	//geXForm3d_GetIn(r->XForm, &temp); // get backwards
-	//geVec3d_Scale(&temp, -1.0f, &temp); // make it the inverse
-	//temp.Y = 0.0f; // on the plane
-	//d = getAngleBetwen(dirPosRat, temp); // get the angles
-	
-
-	if( a < GE_PI/2.0f )
-		r->Orientation.Y -= time * b;// rotate right
-	else
-		r->Orientation.Y += time * b;// rotate left
-}
 
 void apply_rats(geWorld* world){
 	geEntity_EntitySet	*Set=0;
@@ -437,7 +360,7 @@ void enemy_rat_iterate(geWorld* World, float time)
 			{
 				ds = enemy_canAttack(Pos, r->Position, World);
 
-				enemy_rat_lookAtPos(&Pos, r, time);
+				enemy_lookAtPos(&Pos, r->XForm, &(r->Orientation), time);
 				Basic_MoveForward(r->Position, r->Orientation, 40.0f * time, World, r->ExtBox, &(r->Position) );
 
 				if( ds < 0.0f )
@@ -480,7 +403,7 @@ void enemy_rat_iterate(geWorld* World, float time)
 			{
 				ds = enemy_canAttack(Pos, r->Position, World);
 
-				enemy_rat_lookAtPos(&Pos, r, time);
+				enemy_lookAtPos(&Pos, r->XForm, &(r->Orientation), time);
 
 				if( ds < 0.0f )
 				{
@@ -594,6 +517,72 @@ geBoolean enemy_rat_isAlive(geActor* enemy)
 	return GE_FALSE;
 }
 
+void enemy_rat_doDamage(Inf_Enemy_Rat* r, int damage){
+	if( damage <= 0 ) return;
+	BloodExplosion(r->Position);
+
+	if( r->health > 0 )
+	{
+		r->health -= damage;
+
+		if( r->health <= 0)
+		{
+			//game_message("The rat died");
+			r->Orientation.X = GE_PI;
+			r->Position.Y += 10.0f;
+			r->state = -1;
+			talkPower_Change( 5.0f );
+			soundsys_play3dsound(&rat_die, &r->Position, 3.0f, GE_FALSE);
+		}
+		else
+		{
+			//game_message("The rat was damaged");
+		}
+	}
+	else
+	{
+		//game_message("The rat is dead");
+		soundsys_play3dsound(&e_splat, &r->Position, 5.0f, GE_FALSE);
+	}
+}
+
+geBoolean enemy_rat_canDamage(geActor* enemy, // the enemy that got hit
+				  geVec3d fromPos, //fromPos - location of the shooter
+				  geVec3d toPos // toPos - location of the weapon max range
+				  )
+{
+	Inf_Enemy_Rat* r;
+	geExtBox eb;
+
+	r = (Inf_Enemy_Rat*) geActor_GetUserData(enemy);
+	if( !r )
+	{
+		error("Convertion error in enemy_rat_damage");
+		return GE_FALSE;
+	}
+
+	geActor_GetDynamicExtBox(r->Actor, &eb);
+	if(! geExtBox_RayCollision( &eb, &fromPos, &toPos, 
+								NULL, NULL ) // don't save the data
+								)
+	{
+		return GE_FALSE;
+	}
+
+	return GE_TRUE;
+}
+
+geVec3d* enemy_rat_getPosition(geActor* act){
+	Inf_Enemy_Rat* r;
+
+	r = (Inf_Enemy_Rat*) geActor_GetUserData(act);
+	if( !r ){
+		error("Convertion error in enemy_rat_getPosition");
+		return 0;
+	}
+
+	return &(r->Position);
+}
 
 geBoolean enemy_rat_damage(geActor* enemy, // the enemy that got hit
 				  unsigned char damage, // how many point damage does this weaopon damage do?
@@ -637,45 +626,10 @@ geBoolean GENESISCC geExtBox_RayCollision( const geExtBox *B, const geVec3d *Sta
 		return GE_TRUE;
 	}
 
-	{
-		BloodExplosion(r->Position);
-	}
-
-	if( r->health > 0 )
-	{
-		r->health -= damage;
-
-		if( r->health <= 0)
-		{
-			//game_message("The rat died");
-			r->Orientation.X = GE_PI;
-			r->Position.Y += 10.0f;
-			r->state = -1;
-			talkPower_Change( 5.0f );
-			soundsys_play3dsound(&rat_die, &r->Position, 3.0f, GE_FALSE);
-		}
-		else
-		{
-			//game_message("The rat was damaged");
-		}
-	}
-	else
-	{
-		//game_message("The rat is dead");
-		soundsys_play3dsound(&e_splat, &r->Position, 5.0f, GE_FALSE);
-	}
+	enemy_rat_doDamage(r, damage);
 
 	return GE_FALSE;
 }
-
-int handle_Vector(SaveFile* file, geVec3d* value);/*{
-	FLOAT(value->X, "Failed to handle X");
-	FLOAT(value->Y, "Failed to handle Y");
-	FLOAT(value->Z, "Failed to handle Z");
-	return 1;
-}*/
-
-#define VECTOR(value, message)		if(! handle_Vector(file, &value) )	{error(message); return 0;}
 
 int handle_rat_enemy(SaveFile* file, geWorld* world){
 	geEntity_EntitySet	*Set;
@@ -707,4 +661,26 @@ int handle_rat_enemy(SaveFile* file, geWorld* world){
 	}
 
 	return 1;
+}
+
+void enemy_rat_explosionDamage(geVec3d* location, float range, int damage){
+	geEntity_EntitySet	*Set;
+	geEntity			*Entity;
+
+	if( !rat_created ) return;
+
+	Set = geWorld_GetEntitySet(World, "Inf_Enemy_Rat");
+	if (Set == NULL) return;
+	Entity = geEntity_EntitySetGetNextEntity(Set, NULL);
+
+	// wade thru them all
+	while( Entity )
+	{
+		Inf_Enemy_Rat* r;
+		r = (Inf_Enemy_Rat *)geEntity_GetUserData(Entity);
+
+		enemy_rat_doDamage( r, explosion_getDamage(location, &(r->Position), range, damage) );
+		
+		Entity = geEntity_EntitySetGetNextEntity(Set, Entity);
+	}
 }

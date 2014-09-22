@@ -170,7 +170,7 @@ void execute_scriptFile(char* file){
 	FILE* f = 0;
 
 	char scriptFile[200];
-	sprintf(scriptFile, ".\\script\\%s", file);
+	sprintf(scriptFile, ".\\levels\\%s\\InfScript\\%s", getLevelFileName(), file);
 	f= fopen(scriptFile, "r");
 	if( f )
 	{
@@ -262,6 +262,9 @@ void execute_command(char *input)
 	} else if( _stricmp(command[0], "bouncy")==0 ){
 		cheats.bouncy = !cheats.bouncy;
 		console_message( cheats.bouncy? "Bouncy mode is on": "Bouncy mode is off" );
+	} else if( _stricmp(command[0], "bbox")==0 ){
+		cheats.bbox = !cheats.bbox;
+		console_message( cheats.bbox? "BBox mode is on": "BBox mode is off" );
 	} else if( _stricmp(command[0], "textureprint")==0 ){
 		cheats.texturePrint = !cheats.texturePrint;
 		console_message( cheats.texturePrint ? "texturePrint is on": "texturePrint is off" );
@@ -313,6 +316,9 @@ void execute_command(char *input)
 	} else if( _stricmp(command[0], "debug")==0 ){
 		cheats.debug = !cheats.debug;
 		console_message( cheats.debug ? "Debug is on": "Debug is off" );
+	} else if( _stricmp(command[0], "log")==0 ){
+		printLog(command[1] );
+		printLog("\n");
 	} else if( _stricmp(command[0], "materialprint")==0 ){
 		cheats.materialPrint = !cheats.materialPrint;
 		console_message( cheats.materialPrint ? "materialPrint is on": "materialPrint is off" );
@@ -437,12 +443,18 @@ void execute_command(char *input)
 		if( i > 255 ) i= 255;
 		if( i < 0 ) i = 0;
 		load_game(i);
-	} else if( _stricmp(command[0], "crosshair")==0 ){
+	} else if( _stricmp(command[0], "cover")==0 ){
 		int i;
 		i = atoi( command[1] );
 		if( i < 0 ) i = 0;
 		if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
-		options.currentCrosshair = i;
+		options.crosshairOver = i;
+	} else if( _stricmp(command[0], "cnormal")==0 ){
+		int i;
+		i = atoi( command[1] );
+		if( i < 0 ) i = 0;
+		if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
+		options.crosshairNormal = i;
 	} else if( _stricmp(command[0], "foggywater")==0 ){
 		options.fogInWater = !options.fogInWater;
 		console_message( options.fogInWater ? "Foggywater is on": "Foggywater is off" );
@@ -493,9 +505,17 @@ void execute_command(char *input)
 		game_message( command[1] );
 	} else if( _stricmp(command[0], "systemmessage")==0 ){
 		system_message( command[1] );
+	} else if( _stricmp(command[0], "gplayso")==0 ){
+		char fileName[200];
+		sprintf(fileName, ".\\sfx\\%s", command[1]);
+		if(! soundsys_play_once_sound( fileName ) ){
+			char errorString[300];
+			sprintf(errorString, "Failed to play sound %s", fileName);
+			console_message(errorString);
+		}
 	} else if( _stricmp(command[0], "playso")==0 ){
 		char fileName[200];
-		sprintf(fileName, ".\\%s", command[1]);
+		sprintf(fileName, ".\\levels\\%s\\Sounds\\%s", getLevelFileName(), command[1]);
 		if(! soundsys_play_once_sound( fileName ) ){
 			char errorString[300];
 			sprintf(errorString, "Failed to play sound %s", fileName);

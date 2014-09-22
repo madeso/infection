@@ -37,5 +37,11 @@ geBoolean enemy_rat_damage(geActor* enemy, // the enemy that got hit
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range
 				  );
+geBoolean enemy_rat_canDamage(geActor* enemy, // the enemy that got hit
+				  geVec3d fromPos, //fromPos - location of the shooter
+				  geVec3d toPos // toPos - location of the weapon max range
+				  );
+geVec3d* enemy_rat_getPosition(geActor* act);
+void enemy_rat_explosionDamage(geVec3d* location, float range, int damage);
 
 #endif

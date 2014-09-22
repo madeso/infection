@@ -1,0 +1,94 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: infection - Win32 Release--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating temporary file "C:\WINDOWS\TEMP\RSP7286.TMP" with contents
+[
+/nologo /MT /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /Fp"Release/infection.pch" /YX /Fo"Release/" /Fd"Release/" /FD /c 
+"C:\infection\src\enemy_zombie.c"
+]
+Creating command line "cl.exe @C:\WINDOWS\TEMP\RSP7286.TMP" 
+Creating temporary file "C:\WINDOWS\TEMP\RSP7287.TMP" with contents
+[
+winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /incremental:no /pdb:"Release/infection.pdb" /machine:I386 /nodefaultlib:"libcd.lib" /out:"Release/infection.exe" 
+.\Release\edit.obj
+.\Release\entity_iterate.obj
+.\Release\extra_genesis.obj
+.\Release\globalGenesis.obj
+.\Release\globals.obj
+.\Release\inf_actor.obj
+.\Release\inf_gui.obj
+.\Release\inf_lua.obj
+.\Release\inf_meny.obj
+.\Release\infection.obj
+.\Release\init.obj
+.\Release\inventory.obj
+.\Release\level.obj
+.\Release\log.obj
+.\Release\main.obj
+.\Release\muliint.obj
+.\Release\options.obj
+.\Release\proposed.obj
+.\Release\subtitles.obj
+.\Release\time_out.obj
+.\Release\Decal.obj
+.\Release\e_rain.obj
+.\Release\e_spout.obj
+.\Release\e_sprite.obj
+.\Release\EffManager.obj
+.\Release\EffParticle.obj
+.\Release\SPool.obj
+.\Release\TPool.obj
+.\Release\crosshair.obj
+.\Release\hud.obj
+.\Release\console.obj
+.\Release\ConsoleBuffer.obj
+.\Release\sound_modder.obj
+.\Release\sound_system.obj
+.\Release\inf_message_system.obj
+.\Release\conversation.obj
+.\Release\damage.obj
+.\Release\jacktalks.obj
+.\Release\player.obj
+.\Release\time_damage.obj
+.\Release\timefx.obj
+.\Release\enemies.obj
+.\Release\enemy_rat.obj
+.\Release\enemy_zombie.obj
+.\Release\fxbitmaps.obj
+.\Release\avl.obj
+.\Release\hash_table.obj
+.\Release\linked_list.obj
+.\Release\md5.obj
+.\Release\OneTimePads.obj
+.\Release\save_file.obj
+.\Release\explosions.obj
+.\Release\grenade_manager.obj
+.\Release\NearestActorContainer.obj
+.\Release\weapon.obj
+.\Release\drawbbox.obj
+.\Release\resources.res
+]
+Creating command line "link.exe @C:\WINDOWS\TEMP\RSP7287.TMP"
+<h3>Output Window</h3>
+Compiling...
+enemy_zombie.c
+C:\infection\src\enemy_zombie.c(59) : warning C4013: 'game_message' undefined; assuming extern returning int
+C:\infection\src\enemy_zombie.c(82) : warning C4013: 'BloodExplosion' undefined; assuming extern returning int
+C:\infection\src\enemy_zombie.c(147) : warning C4013: 'handle_Vector' undefined; assuming extern returning int
+C:\infection\src\enemy_zombie.c(347) : warning C4013: 'system_message' undefined; assuming extern returning int
+C:\infection\src\enemy_zombie.c(115) : warning C4761: integral size mismatch in argument; conversion supplied
+Linking...
+LINK : warning LNK4075: ignoring /EDITANDCONTINUE due to /INCREMENTAL:NO specification
+
+
+
+<h3>Results</h3>
+infection.exe - 0 error(s), 6 warning(s)
+</pre>
+</body>
+</html>

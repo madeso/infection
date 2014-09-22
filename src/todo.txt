@@ -5,11 +5,12 @@ FINISHED
 * (Make sure that all functions in the weaponsystem is using the keys in the control struct)
 * (Primary and seconday fire should be in the keys section aswell)
 * (Reset enemies at level load)
+* (Explosions)
+
 
 TODO
 Handle more keys(numpad) in the console
 cursor/carret in the console that blinks
-Explosions
 Position entity
 getPosition(or something) should return a pointer, not the exact position. (In the conversation code)
 More LUA functions
@@ -30,10 +31,10 @@ Conversation cashe
 If a conversation is failed, enable the entity again?
 Fix @@@todo@@@
 Ability to remove timeout scripts (through number?)
-Change scripts on entities
+Change scripts on entities(lua?)
 Mission status
 Mission objectives
-Mission text (type B-rated action film style)
+Mission text (B-rated action film style)
 Console transition (top to bottom with a picture?)
 Faster text drawing - sikorgans fast geFont?
 Poly/Blood faster drawing (geWorld_AddPoly, geWorld_RemovePoly instead of geWorld_AddPolyOnce?)
@@ -42,3 +43,22 @@ When firing and dead, load the last save/new game/load the last load, but only a
 In-game movies(through scripting?)
 Fix click while reloading in weapon system
 option - quick save at level load
+fix so you can't "fire secondary" weapons in the water
+fix water splash when shooting at the water
+Nice java doc for every function
+Random spawn entity - placing enemies at random locations?
+PositionEntity
+If close to an explosion, lower the sound and play a beeping sound? Simble FSM/if statement back to 100%?
+Changing the max grenade damage
+Weapon actors
+Pickup items, like health armor, weapons and ammo
+Update rat AI to closest position function
+Background music enetity
+Video For Windows Interface via lua.
+End credits with cool rock song trough VFW interface?
+Save grenade positions
+Inf_LevelData cleared after each level load, internal level data like: got_red_key, talked_to_boss and pressed_big_red_button?
+Reset lua variables after each call?
+Testing, white/black box?
+Go through code - looking for stuff that might crash and/or leak memory?
+Move data to VFS?

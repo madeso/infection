@@ -24,6 +24,7 @@ typedef struct cheater_tag
 	geBoolean bouncy;
 	geBoolean printFps;
 	geBoolean debug;
+	geBoolean bbox;
 }cheater;
 
 typedef struct options_tag
@@ -38,7 +39,8 @@ typedef struct options_tag
 	char startLevel[200];
 	float meterfog;
 	geBoolean weaponFlash;
-	int currentCrosshair;
+	int crosshairNormal;
+	int crosshairOver;
 	char invertSpeakers;
 }Options;
 
@@ -52,6 +54,7 @@ typedef struct options_tag
 #define CONTENTS_LADDER		GE_CONTENTS_USER2
 #define CONTENTS_BOUNCY		GE_CONTENTS_USER3
 #define CONTENTS_NOMARK		GE_CONTENTS_USER4
+#define CONTENTS_DEATH		GE_CONTENTS_USER5
 
 // state defines
 #define STATE_NORMAL	0
@@ -76,6 +79,7 @@ geBoolean dojump;
 geVec3d Angle;//In wich way are we looking?
 geVec3d Pos;//Our temporary pos
 
+int currentCrosshair;
 cheater cheats; // current cheats
 Options options; // current options
 
@@ -103,6 +107,7 @@ void play_walksound_right();
 void play_walksound_left();
 
 geBoolean player_is_on_ground();
+void player_is_on_ground_setup();
 
 void enter_water();
 void leave_water();

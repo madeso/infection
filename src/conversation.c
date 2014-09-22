@@ -144,13 +144,13 @@ int processInput(geWorld *world, char* input, float timePassed){
 		ignore = GE_FALSE;
 	} else if( _stricmp(command[0], "PersonSay")==0 ){
 		char fileName[300];
-		sprintf(fileName, ".\\conversation\\%s\\%s\\%s.wav", levelFile, personName, command[1]);
+		sprintf(fileName, ".\\levels\\%s\\Conversation\\%s\\%s.wav", levelFile, personName, command[1]);
 		soundsys_conversation_personSay(fileName, person, min, ignore);
 		currentInstruction++;
 		return GE_TRUE;
 	} else if( _stricmp(command[0], "YouSay")==0 ){
 		char fileName[300];
-		sprintf(fileName, ".\\conversation\\hero\\%s.wav", command[1]);
+		sprintf(fileName, ".\\levels\\%s\\Conversation\\hero\\%s.wav", levelFile, command[1]);
 		soundsys_conversation_heroSay(fileName);
 		currentInstruction++;
 		return GE_TRUE;
@@ -210,7 +210,7 @@ void startConversation(char* theLevelFile, char* fileName, geBoolean stopThisIfP
 		soundsys_conversation_stopTalkiing();
 		conversation_endGame();
 	}
-	sprintf(filePath, ".\\conversation\\%s\\%s", theLevelFile, fileName);
+	sprintf(filePath, ".\\levels\\%s\\Conversation\\%s", theLevelFile, fileName);
 	currentFile = fopen(filePath, "r");
 	if(! currentFile ){
 		char str[200];

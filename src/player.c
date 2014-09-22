@@ -22,7 +22,9 @@
 #include "entity_iterate.h"
 #include "infection.h"
 
-#define STEP_SIZE 45
+#include "fxbitmaps.h"
+
+#define STEP_SIZE 50.0f
 
 //ladder
 geVec3d inLadder;
@@ -120,8 +122,8 @@ void trace_flashlight()
 		GE_CONTENTS_SOLID_CLIP,
 		GE_COLLIDE_ALL,
 		0xffffffff,
-		NULL,
-		NULL,
+		cb_move,
+		1,
 		&Col
 		)//end of function call
 		)//end of if
@@ -190,7 +192,17 @@ void flip_flashlight()
 //			returns true if the hero is on the the ground, false if not
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-geBoolean player_is_on_ground()
+geBoolean onGround;
+
+geBoolean player_is_on_ground(){
+	return onGround;
+}
+
+void player_isNowOnGround(){
+	onGround = GE_TRUE;
+}
+
+void player_is_on_ground_setup()
 {
 	//check for collision from current position XForm.translation and 1 unit down
 	geVec3d Pos;
@@ -199,6 +211,7 @@ geBoolean player_is_on_ground()
 		XForm.Translation.Y-0.5f,
 		XForm.Translation.Z
 		);
+	onGround = GE_FALSE;
 	
 	if	(geWorld_Collision(
 		World,					//The world
@@ -215,10 +228,8 @@ geBoolean player_is_on_ground()
 		)//end of function call
 		)//end of if
 	{
-		return GE_TRUE;
+		onGround =  GE_TRUE;
 	}
-	
-	return GE_FALSE;
 }
 
 geBoolean player_canStand(geFloat change)
@@ -285,6 +296,49 @@ void update_player_state()
 	{
 		player_state = STATE_NORMAL;
 	}
+	
+	{
+		char string[200];
+		int i = 0;
+		static int prev = 0;
+	//if( player_is_alive ){
+	i = i | 1;
+		if (geWorld_GetContents(
+			World,
+			&XForm.Translation,
+			&ExtBox.Min,
+			&ExtBox.Max,
+			//GE_COLLIDE_MODELS,
+			GE_COLLIDE_ALL, 
+			0,
+			NULL,
+			NULL,
+			&contents
+			) // func call
+			) //if
+		{
+			i = i | 2;
+			if( contents.Contents & CONTENTS_DEATH ) {
+				i = i | 4;
+				kill();
+			}
+		}
+		else {
+			i = i | 8;
+		}
+
+		sprintf(string, "%s%s%s%s",
+			((i&1)?"X":"-"),
+			((i&2)?"X":"-"),
+			((i&4)?"X":"-"),
+			((i&8)?"X":"-")  );
+		if( prev != i ) {
+			//printLog("\n\n\n\n\n\n");
+			//game_message(string);
+			prev = i;
+		}
+		//printLog(string);
+	}
 }
 
 unsigned char player_getState()
@@ -327,6 +381,11 @@ void player_crouchOrStand()
 	GE_Collision lCol;
 	
 	fromPos = Pos;
+
+	if( !player_is_alive ){
+		EXTBOX_SET(-80.0f);
+		return;
+	}
 
 	//if( !player_is_on_ground() ) return;
 	
@@ -417,15 +476,54 @@ void player_crouchOrStand()
 //			Handles walking in stairs
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-geVec3d front;
+void point(geVec3d* pos, int type){
+	GE_LVertex vertex;
+	geBitmap* bitmap=0;
+	vertex.u = 0.0f;
+	vertex.v = 0.0f;
+	vertex.r = 255.0f;
+	vertex.g = 255.0f;
+	vertex.b = 255.0f;
+	vertex.a = 255.0f;
+
+	vertex.X = pos->X;
+	vertex.Y = pos->Y;
+	vertex.Z = pos->Z;
+
+	switch(type){
+	case 0:
+		bitmap = fireSprite;
+		break;
+	case 1:
+		bitmap = woodSprite;
+		break;
+	default:
+		bitmap = electricSmoke;
+		break;
+	}
+
+	geWorld_AddPolyOnce(World,
+			&( vertex ),
+			1,
+			bitmap,
+			GE_TEXTURED_POINT,
+			0,
+			0.1f );
+}
+
 char StepUp(geVec3d *cPos)
 {
 #define		COLLISION		geWorld_Collision(World,&ExtBox.Min,&ExtBox.Max,&fromPos,&toPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff,cb_move,NULL,&lCol)
 	geVec3d fromPos;
 	geVec3d toPos;
-	//geVec3d front;
 	GE_Collision lCol;
 	geFloat multi;
+	geVec3d front;
+
+	//geXForm3d_GetIn(&XForm, &front);
+	front.X = CurrentSpeed.X;
+	front.Y = 0;
+	front.Z = CurrentSpeed.Z;
 
 	fromPos.X = toPos.X = cPos->X;
 	fromPos.Z = toPos.Z = cPos->Z;
@@ -435,6 +533,7 @@ char StepUp(geVec3d *cPos)
 	if( COLLISION )
 	{
 		toPos.Y = lCol.Impact.Y;
+		//point(&lCol.Impact, 0);
 	}
 	
 	fromPos.Y = toPos.Y;
@@ -443,7 +542,7 @@ char StepUp(geVec3d *cPos)
 	// Move forward
 	//
 	
-	multi = 1.0f;
+	multi = 0.5f;
 
 	fromPos = toPos;
 
@@ -451,9 +550,9 @@ char StepUp(geVec3d *cPos)
 		front.Y = 0.0f;
 	geVec3d_AddScaled(&toPos, &front, multi, &toPos);
 	
-	
 	if( COLLISION )
 	{
+		//point(&lCol.Impact, 0);
 		return 1;
 		//toPos.X = lCol.Impact.X;
 		//toPos.Z = lCol.Impact.Z;
@@ -467,14 +566,16 @@ char StepUp(geVec3d *cPos)
 	// Move down
 	//
 	//*
-	Pos.Y -= STEP_SIZE; // or STEP_SIZE
+	toPos.Y -= STEP_SIZE; // or STEP_SIZE
 	
 	
 	if( COLLISION )
 	{
 		toPos = lCol.Impact;
+		//point(&lCol.Impact, 0);
 	}
 	//*/
+	player_isNowOnGround();
 	
 	
 	// stepping successfull, update the Pos;
@@ -484,7 +585,7 @@ char StepUp(geVec3d *cPos)
 	cPos->Y = toPos.Y;
 	cPos->Z = toPos.Z;
 	
-	
+	moved = 1;
 	return 0;
 #undef COLLISION
 }
@@ -694,7 +795,7 @@ void user_interaction()
 			if( player_getState() == STATE_WATER )
 			{
 				geXForm3d_GetUp(&XForm, &up);
-				geVec3d_AddScaled(&CurrentSpeed, &up, speed * TIME * heroTime * -2, &CurrentSpeed);
+				geVec3d_AddScaled(&CurrentSpeed, &up, speed * TIME * heroTime * -1.0f, &CurrentSpeed);
 				moved = 1;
 			}
 		}
@@ -743,7 +844,7 @@ void user_interaction()
 			{
 				geXForm3d_GetUp(&XForm, &up);
 				geVec3d_AddScaled(&CurrentSpeed, &up, speed * TIME * heroTime, &CurrentSpeed);
-				ySpeed = PLAYER_JUMP_SPEED;
+				ySpeed = PLAYER_JUMP_SPEED * 1.3f;
 				//moved = 1;
 			}
 		}
@@ -900,7 +1001,31 @@ void user_interaction()
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-
+void StepDown(geVec3d* cPos){
+	geVec3d toPos = *cPos;
+	toPos.Y -= (speed * TIME * heroTime) ;
+	
+	//if( moved ) {
+		if( !cheats.ghost && geWorld_Collision(
+			World,					//The world
+			&ExtBox.Min,			//Boundingbox min
+			&ExtBox.Max,			//Boundingbox max
+			cPos,				//Old pos
+			&toPos,					//Future pos
+			GE_CONTENTS_SOLID_CLIP,	//Collission type
+			GE_COLLIDE_ALL,			//Collission type
+			0xffffffff,				//?
+			cb_move,				//?
+			NULL,					//?
+			&Col					//We need to save the collission info data
+			)//end of function call
+			)//end of if
+		{
+			*cPos = Col.Impact;
+			player_isNowOnGround();
+		}
+	//}
+}
 
 void StopXZ()
 {
@@ -910,7 +1035,7 @@ void StopXZ()
 	prePos = Pos;
 
 	Pos.X += CurrentSpeed.X;
-	Pos.Y += CurrentSpeed.Y;
+	Pos.Y += CurrentSpeed.Y ;
 	Pos.Z += CurrentSpeed.Z;
 	
 	if( !cheats.ghost && geWorld_Collision(
@@ -927,11 +1052,9 @@ void StopXZ()
 		&Col					//We need to save the collission info data
 		)//end of function call
 		)//end of if
-	{
-		front.X = CurrentSpeed.X;
-		front.Y = 0;
-		front.Z = CurrentSpeed.Z;
-		
+	{		
+		//prePos = Col.Impact;
+
 		if( StepUp(&prePos) )
 		{
 			
@@ -1013,8 +1136,11 @@ void StopXZ()
 		else
 		{
 			Pos = prePos;
+			//game_message("changing pos");
 		}
 	}
+
+	StepDown(&Pos);
 }
 
 
@@ -1031,11 +1157,12 @@ void apply_gravity()
 	geFloat sq_speed;
 	char do_bounce = 0;
 	
+	StopXZ();
 	prePos = Pos;
-	
+
 	if( player_getState() == STATE_LADDER || cheats.ghost )
 	{
-		StopXZ();
+		//StopXZ();
 		ySpeed = 0.0f;
 		return;
 	}
@@ -1044,22 +1171,20 @@ void apply_gravity()
 		//update y speed
 		if( player_getState() == STATE_WATER )
 		{
-			if( moved )
-			{
-				ySpeed = 0;
-			}
-			else
-			{
-				ySpeed += gravity * 0.04f * TIME * gravityTime;
-			}
+			//if( moved )
+			//{
+			//	ySpeed = 0;
+			//}
+			//else
+			//{
+				ySpeed += ((ySpeed > 0.0f )?-1.0f:1.0f) * gravity * 0.04f * TIME * gravityTime;
+			//}
 		}
 		else
 		{
 			ySpeed -= gravity * TIME * gravityTime;
 		}
 	}
-
-	StopXZ();
 
 	//move up/down
 	Pos.Y += ySpeed*TIME * gravityTime;

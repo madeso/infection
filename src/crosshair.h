@@ -8,7 +8,7 @@ Functions that takes care of loading rendering and deleting the crosshairs.
 
 #include "genesis.h"
 
-#define NUM_CROSSHAIRS 5
+#define NUM_CROSSHAIRS 25
 
 //load ups all the bitmaps the game uses
 geBoolean LoadCrossHair();

@@ -10,6 +10,7 @@
 
 #include <windows.h>
 #include "resource.h"
+#include "drawbbox.h"
 
 #include "genesis.h"
 #include "inf_message_system.h"
@@ -41,7 +42,7 @@
 #include "subtitles.h"
 #include "time_out.h"
 #include "inf_meny.h"
-
+#include "sound_modder.h"
 #include "libraries.h"
 
 #define PLAYER_NORMAL_AIR 20.0f
@@ -49,6 +50,8 @@
 
 #define VK_OEM_PERIOD	0xBE
 #define VK_OEM_COMMA	0xBC
+
+#define MAX_FPS			50.0f
 
 //prototype of the WndPrc function
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -101,6 +104,10 @@ void render_basic()
 		run = 0;
 		printLog("***geEngine_RenderWorld() failed.\n\n");
 		error("geEngine_RenderWorld() failed");
+	}
+
+	if( cheats.bbox ) {
+		DrawBoundBox(World, &(XForm.Translation), &(ExtBox.Min), &(ExtBox.Max) );
 	}
 
 	if( cheats.debug ){
@@ -170,6 +177,8 @@ void render_game()
 		//system_message("Ticking");
 		DecalMgr_Tick(dMgr, TIME);
 	}
+
+	renderFlash();
 	
 	//print messages
 	if( render_messages() == GE_FALSE )
@@ -451,7 +460,7 @@ char need_to_render(){
 	current = timeGetTime()/1000.0f;
 	diff = current - lastUpdateTime;
 	realFps = 1.0f / diff;
-	if( realFps > 50.0f ) return 0;
+	if( realFps > MAX_FPS ) return 0;
 	return 1;
 }
 
@@ -538,7 +547,7 @@ void changeXForm(){
 	
 	if( hero_hit_points == 0 && player_is_alive) {
 		player_is_alive = GE_FALSE;
-		Angle.Z = (rand()%3600)/10.0f ;
+		Angle.Z = ((rand()%2)?1.0f:-1.0f) * (rand()%450)/10.0f ;
 	}
 	
 	geXForm3d_RotateZ( &XForm, Angle.Z * DEG);
@@ -556,32 +565,21 @@ void changeXForm(){
 
 void handleGameUpdate(){
 	moved = 0;
-	printExtended("****************************************************\n\n\n");
-	printExtended("crouchOrStand \n");
+
+	apply_gravity();
+	player_is_on_ground_setup();
 	player_crouchOrStand();
-	
-	printExtended("user_interaction \n");
 	user_interaction();
 	player_frame();
-	
-	printExtended("applyGravity \n");
-	apply_gravity();
-	
-	printExtended("weapon_bob \n");
 	weapon_bob(moved);
-	
-	printExtended("timedamage_iterate \n");
 	timedamage_iterate();
-	
-	printExtended("enemy_iterate \n");
 	enemy_iterate(World, TIME * enemyTime);
-	
-	printExtended("iterate_inteties\n");
 	iterate_entities(&Pos, World);
-	
 	conversation_iterate(World, &Pos, TIME *enemyTime );
 	talkPower_Change( -1 * TIME * enemyTime ); // changed from heroTime to enemyTime because we want jack to talk more when we are killing more
 	timeout_iterate(TIME * heroTime );
+	iterateFlash();
+	sm_iterate(TIME * heroTime );
 }
 
 void handleConsoleUpdate(){
@@ -721,6 +719,45 @@ void updateState() {
 	}
 }
 
+#define TRACE_DISTANCE 100.0f
+void updateCursor(){
+	GE_Collision Col;
+	geVec3d In;
+	geVec3d farPos;
+
+	geXForm3d_GetIn(&XForm,  &In);
+	//geCamera_ScreenPointToWorld(Camera, Width/2, Height/2, &In);
+	geVec3d_AddScaled(&(XForm.Translation), &In, TRACE_DISTANCE, &farPos); 
+	currentCrosshair = options.crosshairNormal;
+
+	if( geWorld_Collision(
+		World,
+		NULL,
+		NULL,
+		&( XForm.Translation ),
+		&farPos,
+		GE_CONTENTS_SOLID_CLIP,
+		GE_COLLIDE_ALL,
+		0xffffffff,
+		NULL,
+		NULL,
+		&Col
+		)//end of function call
+		)//end of if
+	{
+		geBoolean result = 0;
+
+		if(! Col.Model ){
+			return;
+		}
+
+		result = can_use_entity(Col.Model);
+		if( result ) {
+			currentCrosshair = options.crosshairOver;
+		}
+	}
+}
+#undef TRACE_DISTANCE
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -741,13 +778,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		while( !need_to_render() );
 
 		update_timing();
-
 		handleCursorVisibility();
 
 		if( !renderMeny() ){
 			update_player_state();
 			set_speed();
 			each_second_update();
+			updateCursor();
 		} else {
 			meny_preRedner();
 		}

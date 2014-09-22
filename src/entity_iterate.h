@@ -15,7 +15,7 @@ It will also iterate:
 #include "save_file.h"
 handle_entities(SaveFile* file, geWorld* world);
 
-void new_entities( geWorld* world); // initializes the data of the entities
+geBoolean new_entities( geWorld* world); // initializes the data of the entities
 void iterate_entities( geVec3d* pos, geWorld* world); // iterates the enities
 void delete_entities( geWorld* world);// deletes the entities
 geVec3d* findPositionByName(geWorld* world, char* name);
@@ -30,5 +30,6 @@ void entity_disableByName(geWorld* world, char* name);
 
 
 int use_entity(geWorld_Model* model);
+geBoolean can_use_entity(geWorld_Model* model);
 
 #endif
