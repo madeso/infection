@@ -15,15 +15,17 @@ and some basic AI look at functions
 float AnglesToPoint( geVec3d *s, geVec3d *d, geVec3d *a );
 void LookAt(geVec3d from, geVec3d point, geVec3d *Result);
 
+// @@@todo@@@ Add the bipmaps to a  world and render as a poly instead?
+
 // my wrapper for Jeffs code
 // Loads a bitmap, scales it and adds it to the engine. Returns the bitmaps is successfull, Returns 0 otherwise.
-geBitmap* loadBitmapEx(char* fileName, int width, int height, geEngine* Engine);
+geBitmap* loadBitmapEx(const char* fileName, int width, int height, geEngine* Engine);
 
-geBitmap* loadBitmapExColorKey(char* fileName, int width, int height, geEngine* Engine, int idex);
+geBitmap* loadBitmapExColorKey(const char* fileName, int width, int height, geEngine* Engine, int idex);
 
 // Loads the bitmap, sets the transparent key to zero (0) and adds the bitmap to the engine.
-geBitmap* LoadBmp(char *filename);
-geBitmap* LoadBmpNoColorKey(char *filename);
+geBitmap* LoadBmp(const char *filename);
+geBitmap* LoadBmpNoColorKey(const char *filename);
 
 void killBitmap(geBitmap* bitmap);
 

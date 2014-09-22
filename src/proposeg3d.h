@@ -13,5 +13,6 @@
 //Note: The general formula is: Out = In - 2*Normal*(In dot Normal)
 void geVec3d_Reflect(geVec3d* In, geVec3d* Normal, geVec3d* Out, geFloat Scale);
 geBoolean geActor_Collision(geActor* actor, geVec3d *from, geVec3d *to);
+geBoolean geActor_Collision_Ex(geActor* actor, geExtBox* playerEb, geVec3d *from, geVec3d *to);
 
 #endif

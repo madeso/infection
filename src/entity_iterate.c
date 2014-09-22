@@ -6,7 +6,8 @@
 #include "extra_genesis.h"
 #include "timefx.h"
 #include "log.h"
-
+#include "pickup.h"
+#include "inf_actor.h"
 
 /*
 How the entities works:
@@ -90,6 +91,54 @@ geBoolean new_button(geWorld* world)
 	return GE_TRUE;
 }
 
+geBoolean new_pickup(geWorld* world)
+{
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+	int fail = 0;
+
+    Set = geWorld_GetEntitySet(world, "Inf_Pickup");
+	if (Set == NULL) return GE_TRUE;
+
+    // enumerate buttons
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_Pickup *pPickup = (Inf_Pickup*)geEntity_GetUserData(Entity);
+		
+		pPickup->actor = pickup_getActorByIndex(world, pPickup->type, pPickup->origin);
+		if( pPickup->actor )
+			geActor_SetUserData(pPickup->actor, pPickup);
+	}
+
+	if( fail ) return GE_FALSE;
+	return GE_TRUE;
+}
+
+geBoolean delete_pickup(geWorld* world)
+{
+    geEntity_EntitySet	*Set;
+    geEntity			*Entity;
+	int fail = 0;
+
+    Set = geWorld_GetEntitySet(world, "Inf_Pickup");
+	if (Set == NULL) return GE_TRUE;
+
+    // enumerate buttons
+    for (Entity = geEntity_EntitySetGetNextEntity(Set, NULL); 
+		Entity; Entity = geEntity_EntitySetGetNextEntity(Set, Entity) )
+    {
+        Inf_Pickup *pPickup = (Inf_Pickup*)geEntity_GetUserData(Entity);
+		if( pPickup->actor ){
+			KillActor(world, &(pPickup->actor) );
+			pPickup->actor = 0;
+		}
+	}
+
+	if( fail ) return GE_FALSE;
+	return GE_TRUE;
+}
+
 // iterates the commandEnttitys
 void iterate_commandEntity( geVec3d* pos, geWorld* world) 
 {
@@ -131,7 +180,7 @@ void iterate_commandEntity( geVec3d* pos, geWorld* world)
 	}
 }
 
-void disable_movingEntites(geWorld* world, char* name) {
+void disable_movingEntites(geWorld* world, const char* name) {
 	geFloat				speed = 1.0f;
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -154,7 +203,7 @@ void disable_movingEntites(geWorld* world, char* name) {
 	}
 }
 
-void enable_movingEntites(geWorld* world, char* name) {
+void enable_movingEntites(geWorld* world, const char* name) {
 	geFloat				speed = 1.0f;
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -361,7 +410,7 @@ void iterate_doors( geVec3d* pos, geWorld* world)
 	}
 }
 
-geVec3d* find_commandEntity(geWorld* world, char* name)
+geVec3d* find_commandEntity(geWorld* world, const char* name)
 {
 	geEntity_EntitySet	*Set;
 	geEntity			*Entity;
@@ -398,7 +447,7 @@ geVec3d* find_commandEntity(geWorld* world, char* name)
 }
 
 // initializes the command entity data
-void commandEntity_enableByName( geWorld* world, char* name)
+void commandEntity_enableByName( geWorld* world, const char* name)
 {
 	geEntity_EntitySet	*Set;
 	geEntity			*Entity;
@@ -432,7 +481,7 @@ void commandEntity_enableByName( geWorld* world, char* name)
 }
 
 // initializes the command entity data
-void commandEntity_disableByName( geWorld* world, char* name)
+void commandEntity_disableByName( geWorld* world, const char* name)
 {
 	geEntity_EntitySet	*Set;
 	geEntity			*Entity;
@@ -465,7 +514,7 @@ void commandEntity_disableByName( geWorld* world, char* name)
 	}
 }
 
-void simpleDoor_enableByName(geWorld* world, char* name)
+void simpleDoor_enableByName(geWorld* world, const char* name)
 {
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -484,7 +533,7 @@ void simpleDoor_enableByName(geWorld* world, char* name)
 		}
 	}
 }
-void simpleDoor_disableByName(geWorld* world, char* name)
+void simpleDoor_disableByName(geWorld* world, const char* name)
 {
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -504,7 +553,7 @@ void simpleDoor_disableByName(geWorld* world, char* name)
 	}
 }
 
-void button_enableByName(geWorld* world, char* name)
+void button_enableByName(geWorld* world, const char* name)
 {
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -572,7 +621,7 @@ void delete_doors(geWorld* world)
 	}
 }
 
-void button_disableByName(geWorld* world, char* name)
+void button_disableByName(geWorld* world, const char* name)
 {
     geEntity_EntitySet	*Set;
     geEntity			*Entity;
@@ -687,6 +736,9 @@ geBoolean new_entities( geWorld* world)
 	if(! new_doors(world) ){
 		status = GE_FALSE;
 	}
+	if(! new_pickup(world) ){
+		status = GE_FALSE;
+	}
 
 	return status;
 }
@@ -703,22 +755,23 @@ void delete_entities( geWorld* world)
 	if( !World ) return;
 	delete_doors(world);
 	delete_buttons(world);
+	delete_pickup(world);
 }
 
-geVec3d* findPositionByName(geWorld* world, char* name){
+geVec3d* findPositionByName(geWorld* world, const char* name){
 	return find_commandEntity(world, name);
 	// this function will call other functions like that find position entities
 	// and other non-visible entities
 }
 
-void entity_enableByName(geWorld* world, char* name){
+void entity_enableByName(geWorld* world, const char* name){
 	commandEntity_enableByName(world, name);
 	simpleDoor_enableByName(world, name);
 	button_enableByName(world, name);
 	enable_movingEntites(world, name);
 }
 
-void entity_disableByName(geWorld* world, char* name){
+void entity_disableByName(geWorld* world, const char* name){
 	commandEntity_disableByName(world, name);
 	simpleDoor_disableByName(world, name);
 	button_disableByName(world, name);

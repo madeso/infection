@@ -5,9 +5,11 @@
 #include "useful_macros.h"
 #include "infection.h"
 #include "enemies.h"
+#include "time_damage.h"
+#include "fxbitmaps.h"
 
 void kill() {
-	soundsys_play_sound( &die[generate_random(5)], GE_FALSE );
+	soundsys_play_sound( &die[generate_random(5)], GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 	hero_hit_points = 0;
 	player_is_alive = GE_TRUE;
 	add_redFlash( 3.0f );
@@ -18,6 +20,9 @@ void damagex(int dmg, int type){
 		armor_piercing_damage(dmg);
 	else
 		damage(dmg);
+	if( type == DAMAGE_ZOMBIE ) {
+		timedamage_add(TIMEDAMAGE_INFECTED, rand()%3+1);
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,14 +47,16 @@ void armor_piercing_damage(int damage)
 		else
 		{
 			//play sound damage
-			soundsys_play_sound( &hurt[generate_random(7)], GE_FALSE );
+			soundsys_play_sound( &hurt[generate_random(7)], GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			//knockback
 			hero_hit_points -= damage;
+			BloodExplosion(Pos);
 		}
 	}
 	else
 	{
-		soundsys_play_sound( &hurt[generate_random(7)], GE_FALSE );
+		soundsys_play_sound( &hurt[generate_random(7)], GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
+		BloodExplosion(Pos);
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +86,7 @@ void damage(int damage)
 			else
 			{
 				hero_armor_points -= damage;
-				soundsys_play_sound( &armor[generate_random(5)], GE_FALSE );
+				soundsys_play_sound( &armor[generate_random(5)], GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			}
 		}
 		else

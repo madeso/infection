@@ -129,6 +129,7 @@ int processInput(geWorld *world, char* input, float timePassed){
 	} else if( _stricmp(command[0], "EndConversation")==0 ){
 		subtitle_newGame();
 	} else if( _stricmp(command[0], "TalkingTo")==0 ){
+		strcpy(personName, command[1]);
 		person = findLocationByName(world, command[1] );
 		if(! person ){
 			char str[200];
@@ -176,7 +177,7 @@ void conversation_iterate(geWorld* world, geVec3d *playerPos, float timePassed){
 	if(! currentFile ) return;
 	if( soundsys_conversation_isTalking() ){
 		//playerPos
-		soundsys_conversation_updatePersonSound(person, min, ignore);
+		//soundsys_conversation_updatePersonSound(person, min, ignore); // deprecated function, don't needed to be called
 		return;
 	}
 
@@ -202,7 +203,7 @@ void conversation_iterate(geWorld* world, geVec3d *playerPos, float timePassed){
 // set's up and does the file checking/loading
 // the iterate function takes care of executing all the commands
 // this function also kills the previous sounds if needed
-void startConversation(char* theLevelFile, char* fileName, geBoolean stopThisIfPrevious){
+void startConversation(const char* theLevelFile, const char* fileName, geBoolean stopThisIfPrevious){
 	char filePath[300];
 	console_message("Conversation initiated");
 	if( soundsys_conversation_isTalking() ){

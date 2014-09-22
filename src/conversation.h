@@ -5,6 +5,6 @@
 
 void conversation_endGame();
 void conversation_iterate(geWorld* world, geVec3d *playerPos, float timePassed);
-void startConversation(char* theLevelFile, char* fileName, geBoolean stopThisIfPrevious);
+void startConversation(const char* theLevelFile, const char* fileName, geBoolean stopThisIfPrevious);
 
 #endif

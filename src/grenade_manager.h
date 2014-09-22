@@ -3,8 +3,8 @@
 #ifndef __GRENADE_MANAGER_H
 #define __GRENADE_MANAGER_H
 
-#define NUMBER_OF_GRENADES					5
-#define GRENADE_DAMAGE_RADIUS				160000.0f
+#define NUMBER_OF_GRENADES					10
+#define GRENADE_DAMAGE_RADIUS				160000.0f // 400
 
 typedef struct _InfGrenade {
 	geBoolean active;

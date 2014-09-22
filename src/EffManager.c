@@ -634,7 +634,7 @@ geBoolean EM_Spray_Process(Eff_Manager *EM, Spray  *Data,  float  TimeDelta)
 	
 } // EM_Spray_Process()
 
-geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direction, geBitmap* image, float speed, geVec3d gravity, float change, float speedMultiply, int count, float life, float scale){
+geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direction, geBitmap* image, float speed, geVec3d gravity, float change, float speedMultiply, int count, float life, float scale, COLLISION_CALLBACK *cb, geExtBox *bb){
 	GE_LVertex vertex;
 	geVec3d velocity;
 	int index;
@@ -665,7 +665,7 @@ geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direct
 				life,
 				&velocity,
 				scale, 0.0f, GE_FALSE,
-				&gravity, 0, 0 );
+				&gravity, cb, bb );
 	}
 
 	return GE_TRUE;
@@ -2608,7 +2608,8 @@ void Electric_BoltEffectRender(
 	}
 }
 
-static geFloat frand(geFloat Low, geFloat High) {
+// sg: removed static so that I can access this nice function
+geFloat frand(geFloat Low, geFloat High) {
 	geFloat	Range;
 	Range = High - Low;
 	return ((geFloat)(((rand() % 1000) + 1))) / 1000.0f * Range + Low;

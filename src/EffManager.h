@@ -21,7 +21,7 @@
 #include "tpool.h"
 #include "spool.h"
 #include "Decal.h"
-
+#include "EffParticle.h" // needed for COLLISION_CALLBACK definition
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -322,7 +322,7 @@ typedef struct Eff_Manager
 } Eff_Manager;
 
 
-geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direction, geBitmap* image, float speed, geVec3d gravity, float change, float speedMultiply, int count, float life, float scale);
+geBoolean EM_ParticleExplosion(Eff_Manager* EM, geVec3d location, geVec3d direction, geBitmap* image, float speed, geVec3d gravity, float change, float speedMultiply, int count, float life, float scale, COLLISION_CALLBACK *cb, geExtBox *bb);
 
 Eff_Manager *EM_Create(geEngine *Engine, geCamera *Camera, geWorld *World);
 EM_Destroy(Eff_Manager *EM);	

@@ -6,7 +6,7 @@
 void subtitle_newGame();
 char* subtitle_getString();
 int subtitle_getPrintX();
-void subtitle_setSubtitle(char* newString);
+void subtitle_setSubtitle(const char* newString);
 void subtitle_SetEnable(geBoolean newEnable);
 geBoolean render_subTitle();
 

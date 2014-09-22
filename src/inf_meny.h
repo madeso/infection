@@ -3,16 +3,14 @@
 
 #include "genesis.h"
 
-#define NO_SHADE
-
-geCamera* meny_getCamera();
-geWorld* meny_getWorld();
+//#define MENY_TYPE_ONE
 
 geBoolean meny_init();
 void meny_update();
 void meny_preRedner();
 void meny_render();
 void meny_delete();
+void meny_onChar(char c);
 
 void goBack();
 char renderMeny();

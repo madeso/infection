@@ -10,6 +10,12 @@ Then it has the operation xpop(extensive pop) that returns the pop-ed character.
 #define EDIT_H
 
 #include "genesis.h"
+#include "xfont.h"
+
+// the extra string needs to include only one %s specifying where the rest should be
+#ifndef EXTRA_STRING
+#define EXTRA_STRING "> %s"
+#endif
 
 // maximum number of characters on the stack
 #define MAX_CHAR	60
@@ -20,14 +26,16 @@ typedef struct
 	unsigned char cPos;//currentPos in string
 	int x; // x position
 	int y; // y position
+	int printExtraString;
+	int font;
 }sEditBox;
 
 void EditBox_push_char(sEditBox *seb, char c); // pushes a character on the edit-box stack
 void EditBox_pop(sEditBox *seb); // pops a character from the edit-box's stack
 void EditBox_init(sEditBox *seb, char* str, int x, int y); // initializes all the data of the edixbox
-void EditBox_render(sEditBox *seb); // renders the edit box
+void EditBox_render(sEditBox *seb, GE_RGBA color); // renders the edit box
 geBoolean EditBox_xpop(sEditBox *seb, char* c); // pops and returns a character from the edit-box's stack
 void EditBox_clear(sEditBox *seb, char *str); // clears the entitre stack of the edit-box
-void EditBox_set(sEditBox *seb, char* toSet);
+void EditBox_set(sEditBox *seb, const char* toSet);
 
 #endif

@@ -1,5 +1,7 @@
 #include "NearestActorContainer.h"
 
+#ifndef NO_NACNA
+
 void nac_addActor(geActor* act, geVec3d* pos, geVec3d* origin){
 	int i = 0;
 	float sqDist = 0.0f;
@@ -43,3 +45,5 @@ NacNa* nac_findAndRemoveClosest(){
 	gNacNa[min].used = 0;
 	return &(gNacNa[min]);
 }
+
+#endif

@@ -20,3 +20,27 @@ geBoolean geActor_Collision(geActor* actor, geVec3d *from, geVec3d *to){
 
 	return GE_FALSE;
 }
+
+geBoolean geActor_Collision_Ex(geActor* actor, geExtBox* playerEb, geVec3d *from, geVec3d *to){
+#define MIN 30.0f
+	geExtBox eb;
+	geExtBox pathEb;
+	geExtBox res;
+
+
+	geExtBox_LinearSweep(playerEb, from, to, &pathEb);
+
+	geActor_GetDynamicExtBox(actor, &eb);
+
+	if( geExtBox_Intersection(&pathEb, &eb, &res) )
+
+	/*if( geExtBox_RayCollision( &eb, from, to, 
+								NULL, NULL ) // don't save the data
+								)*/
+	{
+		return GE_TRUE;
+	}
+
+	return GE_FALSE;
+#undef MIN
+}

@@ -11,10 +11,14 @@
 #include "globals.h"
 #include "fxbitmaps.h"
 #include "grenade_manager.h"
+#include "molotov_manager.h"
+#include "mini_rocket_manager.h"
 #include "proposeg3d.h"
 #include "explosions.h"
 #include "infection.h"
 #include "NearestActorContainer.h"
+#include "console.h"
+#include "recoil.h"
 
 
 // for how many seconds to flash blue screen when picking-up a new weapon
@@ -32,6 +36,10 @@ geBoolean ApplyHLOffset;
 GE_Collision wCol;
 geVec3d wIn;
 
+// selector moving states
+unsigned char selectorState = 0;
+float selectorPosition = 0.0f;
+
 // macros for ease the displayeing of lightning effects
 #define MAKE_LIGHT()		if(!weaponLight)	weaponLight = geWorld_AddLight(World)
 #define DESTROY_LIGHT()		if( weaponLight)	{ geWorld_RemoveLight(World, weaponLight); weaponLight=0;}
@@ -45,9 +53,9 @@ geVec3d wIn;
 #include "keys.h"	// for the bullet trace function - to make the accuracy variable
 					//dependent on user interaction
 
-#define NUMBER_OF_WEAPONS				4
+#define NUMBER_OF_WEAPONS				2
 #define NUMBER_OF_C						6
-#define TOTAL_NUMBER_OF_WEAPONS			24
+#define TOTAL_NUMBER_OF_WEAPONS			12
 
 #define WEAPON_C_COMBATS				0
 #define WEAPON_C_PISTOLS				1
@@ -56,7 +64,9 @@ geVec3d wIn;
 #define WEAPON_C_FLAMES					4
 #define WEAPON_C_EXPLOSIVES				5
 
-#define WEAPON_OPEN_SEC					4
+#define WEAPON_OPEN_SEC					6
+
+#define SELECTOR_TIME_MOD				6.5f
 
 // head for internal function
 void disable_selector();
@@ -194,11 +204,8 @@ geBoolean cb_weapon(geWorld_Model* Model, geActor* Actor, void * Context)
 			return GE_FALSE;
 		}
 
-		// if it is a enemy?
-		if( enemy_canDamage(Actor, d->from, d->to) ){
-			nac_addActor(Actor, enemy_getPosition(Actor), &(d->from) );
-		}
-		else {
+		// consider it a grenade...
+		{
 			// consider it a grenade
 			geActor_Def* def=0;
 			void* data = geActor_GetUserData(Actor);
@@ -309,7 +316,7 @@ geBitmap*	stoneSmoke,
 			mudSmoke;
 */
 
-#define RICHOCHET	if( sfx ) soundsys_play3dsound(&(ric[rand()%2]), &lCol->Impact, 2.0f, GE_TRUE)
+#define RICHOCHET	if( sfx ) soundsys_play3dsound(&(ric[rand()%2]), &lCol->Impact, 2.0f, GE_TRUE, GE_FALSE)
 
 void bullet_hitObstacle_ex(GE_Collision* lCol, int decalType, char gfx, char sfx, char mark){
 	if(lCol->Model){
@@ -459,8 +466,13 @@ void bullet_hitObstacle(GE_Collision* lCol, int decalType){
 //			does the bullet fire function
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#pragma message("Ignoring AP in weapon, change this?")
 geBoolean bullet_trace(geVec3d *from, geVec3d *to, GE_Collision *lCol, int dmg, char type, geBoolean ap){
 	weaponDamage damage;
+	geExtBox bb;
+#define MIN 0.1f
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+#undef MIN
 
 	damage.ap = ap; // armor piercing
 	damage.damage = dmg; //the damage
@@ -469,45 +481,22 @@ geBoolean bullet_trace(geVec3d *from, geVec3d *to, GE_Collision *lCol, int dmg, 
 	damage.type = type; //damage type
 	lCol->Impact = *to;
 
-	nac_clear();
-
-	if( geWorld_Collision(
+	// collision to check grenades and to store collision data about the wall collision...
+	geWorld_Collision(
 		World,
-		NULL, //raytrace
-		NULL, //raytrace
+		&(bb.Min),
+		&(bb.Max),
 		from,
 		to,
 		GE_CONTENTS_SOLID_CLIP,
-		GE_COLLIDE_ALL,
+		GE_COLLIDE_MESHES | GE_COLLIDE_MODELS, // avoid actors since we want the effect happen on the wall if loopDamage returns false
 		0xffffffff,
 		cb_weapon,
 		&damage,
-		lCol)
-		)
-	{
-		NacNa* na = nac_findAndRemoveClosest();
+		lCol);
+	//enemy_damage(lCol->Actor, dmg, damage.type, 1, damage.from, damage.to) );
 
-		if( na ) {
-			if( damage.ap ) {
-				int dmg = damage.damage;
-
-				while( na && dmg > 0) {
-					enemy_damage(na->actor, dmg, damage.type, damage.from, damage.to);
-					dmg -= 5;
-					na = nac_findAndRemoveClosest();
-				}
-			} else {
-				enemy_damage(na->actor, damage.damage, damage.type, damage.from, damage.to);
-			}
-			return GE_FALSE;
-		}
-
-		return GE_TRUE;
-	}
-	else
-	{
-		return GE_FALSE;
-	}
+	return enemy_loopDamage(dmg,type, 1,*from,*to);
 }
 
 geBoolean player_fire_gun(geFloat distance, geFloat theAccuracy, geVec3d *In, GE_Collision *lCol, WeaponType* wt)
@@ -520,9 +509,7 @@ geBoolean player_fire_gun(geFloat distance, geFloat theAccuracy, geVec3d *In, GE
 	accuracy = theAccuracy;
 	// change accuracy to depend on alot of variables
 	
-	if( timedamage_has(TIMEDAMAGE_ZOMBIEBITE) )
-		accuracy += 3.0f;
-	if( timedamage_has(TIMEDAMAGE_INFECTEDBITE) )
+	if( timedamage_has(TIMEDAMAGE_INFECTED) )
 		accuracy += 2.0f;
 
 	if( moved )
@@ -650,6 +637,13 @@ void fn_p_hand (weapon* w,geFloat t)
 			}
 			else
 			{
+#if _DEBUG
+#pragma message("Punsh and get everything")
+			execute_command("new");
+#else
+#pragma message("No cheating while fighting")
+#endif
+
 				game_message("Powerload failed");
 				SET_STATE(w, 9, 0.0f);
 			}
@@ -720,14 +714,20 @@ void fn_f_hand (weapon* w, geBoolean mbnew)
 	{
 		if( w->state==9||w->state==6||w->state==7||w->state==8)
 		{
+#if _DEBUG
+#pragma message("Punsh and get everything")
+			execute_command("giveAll()");
+#else
+#pragma message("No cheating while fighting")
+#endif
 			if( rand()%2 )
 			{
 				w->state=1;
-				soundsys_play_sound( &(w->theWeapon->weaponSound[1]) , GE_FALSE);
+				soundsys_play_sound( &(w->theWeapon->weaponSound[1]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			}
 			else
 			{
-				soundsys_play_sound( &(w->theWeapon->weaponSound[2]) , GE_FALSE);
+				soundsys_play_sound( &(w->theWeapon->weaponSound[2]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 				w->state = 2;
 			}
 			w->stateTime = 0.0f;
@@ -867,19 +867,19 @@ void fn_f_knife (weapon* w, geBoolean mbnew)
 		{
 		case 0:
 			SET_STATE(w, 1, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]) , GE_FALSE);
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			break;
 		case 1:
 			SET_STATE(w, 2, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]) , GE_FALSE);
+			soundsys_play_sound( &(w->theWeapon->weaponSound[2]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			break;
 		case 2:
 			SET_STATE(w, 3, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]) , GE_FALSE);
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			break;
 		case 3:
 			SET_STATE(w, 4, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]) , GE_FALSE);
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 			break;
 		}
 		if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
@@ -932,345 +932,6 @@ float fn_l_knife (weapon* w)
 //----------------------------
 
 
-//---------------------------
-// weapon #3: 10 lb (4.5 kg) Sledge hammer
-void fn_p_hammer (weapon* w,geFloat t)
-{
-	w->stateTime += t* heroTime/enemyTime;
-
-	switch(w->state)
-	{
-	case 0: // apply weapon
-		if( w->stateTime >0.7f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 1: // right hand action
-		if( w->stateTime > 0.8f )
-		{
-			SET_STATE(w, 9, 0.8f);
-		}
-		break;
-	case 2: // left hand action
-		if( w->stateTime > 0.6f)
-		{
-			SET_STATE( w, 9, 0.0f);
-		}
-		break;
-	case 3: // powershot loading
-		if( !(GetAsyncKeyState(controls.secondaryFire) & 0x8000) || w->stateTime > 1.8f )
-		{
-			if(GetAsyncKeyState(controls.secondaryFire) & 0x8000)
-			{
-				SET_STATE(w, 4, 0.0f);
-				game_message("You'll feel a little bit flat soon");
-			}
-			else
-			{
-				SET_STATE(w, 0, 0.0f);
-				game_message("Powerload failed");
-			}
-		}
-		break;
-	case 4: // power shot ready
-		if( !(GetAsyncKeyState(controls.secondaryFire) & 0x8000) || w->stateTime > 5.0f)
-		{
-			if (GetAsyncKeyState(controls.secondaryFire) & 0x8000)
-			{
-				SET_STATE(w, 9, 0.0f);
-				game_message("Time limmit exceeded");
-			}
-			else
-			{
-				game_message("Haaaaiiiiyyyaaa");
-				SET_STATE(w, 5, 0.0f );
-
-				if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
-				{
-					bullet_hitObstacle_ex(&wCol, DECALTYPE_BULLETBIG, 0, 0, 1);
-				}
-				if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
-				{
-					bullet_hitObstacle_ex(&wCol, DECALTYPE_BULLETBIG, 0, 0, 1);
-				}
-			}
-		}
-		break;
-	case 5: // powershot action
-		if( w->stateTime > 1.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 6: // fx1
-		if( w->stateTime > 2.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 7: // fx 2
-		if( w->stateTime > 2.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 9: // idle
-		if( w->stateTime > 5.0f)
-		{
-			w->stateTime = 0.0f;
-		}
-		break;
-	default:
-		printLog("Error in process state for hammer\n");
-		break;
-	}
-}
-void fn_f_hammer (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	if( w->state == 9 || w->state == 6 || w->state == 7)
-	{
-		if(generate_random(2) )
-		{
-			SET_STATE(w, 1, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-		}
-		else
-		{
-			SET_STATE(w, 2, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-		}
-		if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle_ex(&wCol, DECALTYPE_BULLETBIG, 0, 0, 1);
-		}
-	}
-}
-void fn_r_hammer (weapon* w)
-{
-	game_message("You can't reload the sledge hammer");
-}
-void fn_x_hammer (weapon* w)
-{
-	if( w->state ==9)
-	{
-		if( generate_random(2) )
-		{
-			SET_STATE(w, 6, 0.0f);
-		}
-		else
-		{
-			SET_STATE(w, 7, 0.0f);
-		}
-
-	}
-}
-void fn_a_hammer (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_hammer (weapon* w, geBoolean mbnew)
-{
-	system_message("You can't run out of ammo for the hammer");
-}
-void fn_s_hammer (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-		if( w->state == 9 || w->state == 6 || w->state == 7)
-		{
-			game_message("Loading powershot");
-			SET_STATE(w, 3, 0.0f);
-		}
-}
-void fn_y_hammer (weapon* w )
-{
-}
-geBoolean fn_c_hammer (weapon* w)
-{
-	return ( w->state == 9 || w->state == 6 || w->state == 7);
-}
-float fn_l_hammer (weapon* w)
-{
-	if( w->state == 3 )
-	{
-		return ( w->stateTime / 1.8f );
-	}
-	return 0.0f;
-}
-//----------------------------
-
-
-//---------------------------
-// weapon #4: Flathead axe
-void fn_p_axe (weapon* w,geFloat t)
-{
-	w->stateTime += t* heroTime/enemyTime;
-
-	switch(w->state)
-	{
-	case 0: // apply weapon
-		if( w->stateTime >0.7f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 1: // right hand action
-		if( w->stateTime > 0.5f )
-		{
-			SET_STATE(w, 9, 0.8f);
-		}
-		break;
-	case 2: // left hand action
-		if( w->stateTime > 0.5f)
-		{
-			SET_STATE( w, 9, 0.0f);
-		}
-		break;
-	case 3: // powershot loading
-		if( !(GetAsyncKeyState(controls.secondaryFire) & 0x8000) || w->stateTime > 1.8f )
-		{
-			if (GetAsyncKeyState(controls.secondaryFire) & 0x8000)
-			{
-				SET_STATE(w, 4, 0.0f);
-				game_message("Slash n' dash");
-			}
-			else
-			{
-				SET_STATE(w, 9, 0.0f );
-				game_message("Powerload failed");
-			}
-		}
-		break;
-	case 4: // power shot ready
-		if( !(GetAsyncKeyState(controls.secondaryFire) & 0x8000) || w->stateTime > 5.0f)
-		{
-			if (GetAsyncKeyState(controls.secondaryFire) & 0x8000)
-			{
-				game_message("Time limmit exceeded");
-				SET_STATE(w, 9, 0.0f);
-			}
-			else
-			{
-				game_message("Ha!");
-				SET_STATE(w, 5, 0.0f );
-
-				if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
-				{
-					bullet_hitObstacle_ex(&wCol, DECALTYPE_BULLETBIG, 0, 0, 1);
-				}
-			}
-		}
-		break;
-	case 5: // powershot action
-		if( w->stateTime > 1.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 6: // fx1
-		if( w->stateTime > 2.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 7: // fx 2
-		if( w->stateTime > 2.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 9: // idle
-		if( w->stateTime > 5.0f)
-		{
-			w->stateTime = 0.0f;
-		}
-		break;
-	default:
-		printLog("Error in process state for axe\n");
-		break;
-	}
-}
-void fn_f_axe (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	if( w->state == 9 || w->state == 6 || w->state == 7)
-	{
-		if(generate_random(2) )
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-			SET_STATE(w, 1, 0.0f);
-		}
-		else
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-			SET_STATE(w, 2, 0.0f);
-		}
-
-		if( player_fire_gun(FIGHT_TRACE_DISTANCE, FIGHT_ACC, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle_ex(&wCol, DECALTYPE_BULLETBIG, 0, 0, 1);
-		}
-	}
-}
-void fn_r_axe (weapon* w)
-{
-	game_message("You can't reload the axe");
-}
-void fn_x_axe (weapon* w)
-{
-	if( w->state ==9)
-	{
-		if( generate_random(2) )
-		{
-			SET_STATE(w, 6, 0.0f);
-		}
-		else
-		{
-			SET_STATE(w, 7, 0.0f);
-		}
-
-	}
-}
-void fn_a_axe (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_axe (weapon* w, geBoolean mbnew)
-{
-	system_message("You can't run out of ammo for the axe");
-}
-void fn_s_axe (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-		if( w->state == 9 || w->state == 6 || w->state == 7)
-		{
-			SET_STATE(w, 3, 0.0f);
-			game_message("Powershot loading");
-		}
-}
-void fn_y_axe (weapon* w )
-{
-}
-geBoolean fn_c_axe (weapon* w)
-{
-	return ( w->state == 9 || w->state == 6 || w->state == 7);
-}
-float fn_l_axe (weapon* w)
-{
-	if( w->state == 3 )
-	{
-		return ( w->stateTime / 1.8f );
-	}
-	return 0.0f;
-}
-//----------------------------
-
-
-
-
 ///////////////////////////////
 // class: Pistols
 ///////////////////////////////
@@ -1307,14 +968,14 @@ void fn_p_9mm (weapon* w,geFloat t)
 	case 3:
 		if( w->stateTime > 0.7f)
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 4, 0.0f);
 		}
 		break;
 	case 4:
 		if( w->stateTime > 0.7f)
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 5, 0.0f);
 		}
 		break;
@@ -1355,11 +1016,13 @@ void fn_f_9mm (weapon* w, geBoolean mbnew)
 	if( mbnew )
 	if( w->state == 9 || w->state == 6 || w->state == 7 )
 	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		SET_STATE(w, 1, 0.0f);
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 
 		weapon_flash();
+
+		recoil_give(0.25f);
 
 		if( player_fire_gun(BULLET_TRACE_DISTANCE, 4.0f, &wIn, &wCol, w->theWeapon) )
 		{
@@ -1373,7 +1036,7 @@ void fn_r_9mm (weapon* w)
 	if( w->state == 9 || w->state == 6 || w->state == 7 )
 	{
 		SET_STATE(w, 3, 0.0f);
-		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
 void fn_x_9mm (weapon* w)
@@ -1394,7 +1057,7 @@ void fn_a_9mm (weapon* w)
 {
 	w->state = 0;
 	w->stateTime = 0.0f;
-	soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+	soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 }
 void fn_n_9mm (weapon* w, geBoolean mbnew)
 {
@@ -1408,9 +1071,10 @@ void fn_s_9mm (weapon* w, geBoolean mbnew)
 		if( w->state == 9 || w->state == 6 || w->state == 7 )
 		{
 			SET_STATE(w, 2, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			if(!cheats.unlimited_ammo) w->ammonution -= 1;
 			weapon_flash();
+			recoil_give(0.25f);
 			if( player_fire_gun(BULLET_TRACE_DISTANCE, 8.0f, &wIn, &wCol, w->theWeapon) )
 			{
 				bullet_hitObstacle(&wCol, DECALTYPE_BULLET);
@@ -1438,9 +1102,6 @@ float fn_l_9mm (weapon* w)
 
 //---------------------------
 // weapon #2: Desert Eagle .50
-
-
-
 void fn_p_eagle (weapon* w,geFloat t)
 {
 	w->stateTime += t;
@@ -1471,14 +1132,14 @@ void fn_p_eagle (weapon* w,geFloat t)
 	case 3:
 		if( w->stateTime > 0.5f)
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 4, 0.0f);
 		}
 		break;
 	case 4:
 		if( w->stateTime > 0.5f)
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 5, 0.0f);
 		}
 		break;
@@ -1519,11 +1180,12 @@ void fn_f_eagle (weapon* w, geBoolean mbnew)
 	if( mbnew )
 	if( w->state == 9 || w->state == 6 || w->state == 7 )
 	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		SET_STATE(w, 1, 0.0f);
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		weapon_flash();
 
+		recoil_give(0.50f);
 		if( player_fire_gun(BULLET_TRACE_DISTANCE, 5.0f, &wIn, &wCol, w->theWeapon) )
 		{
 			bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
@@ -1536,7 +1198,7 @@ void fn_r_eagle (weapon* w)
 	if( w->state == 9 || w->state == 6 || w->state == 7 )
 	{
 		SET_STATE(w, 3, 0.0f);
-		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
 void fn_x_eagle (weapon* w)
@@ -1557,7 +1219,7 @@ void fn_a_eagle (weapon* w)
 {
 	w->state = 0;
 	w->stateTime = 0.0f;
-	soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+	soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 }
 void fn_n_eagle (weapon* w, geBoolean mbnew)
 {
@@ -1571,9 +1233,10 @@ void fn_s_eagle (weapon* w, geBoolean mbnew)
 		if( w->state == 9 || w->state == 6 || w->state == 7 )
 		{
 			SET_STATE(w, 2, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			if(!cheats.unlimited_ammo) w->ammonution -= 1;
 			weapon_flash();
+			recoil_give(0.50f);
 			if( player_fire_gun(BULLET_TRACE_DISTANCE, 10.0f, &wIn, &wCol, w->theWeapon) )
 			{
 				bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
@@ -1597,306 +1260,6 @@ float fn_l_eagle (weapon* w)
 	return 0.0f;
 }
 //----------------------------
-
-
-//---------------------------
-// weapon #3: Improved tranqualizer
-void fn_p_tranqualizer (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0://grabbing weapon
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 1://shoot
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.5f )
-		{
-			game_message("Jack in");
-			SET_STATE(w, 3, 0.0f);
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.5f )
-		{
-			game_message("click");
-			SET_STATE(w, 4, 0.0f);
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.3f )
-		{
-			w->ammonution = 1;
-			w->magasines--;
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 5:
-		if( w->stateTime > 1.3f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 6:
-		if( w->stateTime > 4.3f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 7:
-		if( w->stateTime > 2.3f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	default:
-		printLog("Error in process state for tranqualizer\n");
-		break;
-	}
-}
-void fn_f_tranqualizer (weapon* w, geBoolean mbnew)
-{
-	if( w->state==9||w->state==5||w->state==6||w->state==7 )
-	{
-		SET_STATE(w,1, 0.0f);
-		game_message("Phjut");
-		weapon_flash();
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-	}
-}
-void fn_r_tranqualizer (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state==9||w->state==5||w->state==6||w->state==7 )
-	{
-		SET_STATE(w, 2, 0.0f);
-		if( !cheats.unlimited_mag ) w->magasines--;
-	}
-}
-void fn_x_tranqualizer (weapon* w)
-{
-	if( w->state == 9 )
-	{
-		switch(generate_random(3) )
-		{
-		case 0:
-			SET_STATE(w, 5, 0.0f);
-			break;
-		case 1:
-			SET_STATE(w, 6, 0.0f);
-			break;
-		default:
-			SET_STATE(w, 7, 0.0f);
-			break;
-		}
-	}
-}
-void fn_a_tranqualizer (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_tranqualizer (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-		game_message("click");
-}
-void fn_s_tranqualizer (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_tranqualizer (weapon* w )
-{
-}
-geBoolean fn_c_tranqualizer (weapon* w)
-{
-	return ( w->state==9||w->state==5||w->state==6||w->state==7 );
-}
-float fn_l_tranqualizer (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
-//---------------------------
-// weapon #4: Improved tazer pistol
-void fn_p_tazer (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.5f)
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 1://fire
-		if( w->stateTime > 0.15f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.13f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.5f)
-		{
-			game_message("Bat in");
-			SET_STATE(w, 4, 0.0f);
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.5f)
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-			SET_STATE(w, 5, 0.0f);
-		}
-		break;
-	case 5:
-		if( w->stateTime > 0.5f)
-		{
-			game_message("Let's blast some");
-			SET_STATE(w, 9, 0.0f);
-			if( !cheats.unlimited_mag ) w->magasines--;
-			w->ammonution = w->theWeapon->max_ammo;
-		}
-		break;
-	case 6:
-		if( w->stateTime > 4.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 7:
-		if( w->stateTime > 4.5f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f)
-		{
-			SET_STATE(w, 9, 0.0f);
-		}
-		break;
-	default:
-		printLog("Error in process state for tazer\n");
-		break;
-	}
-}
-void fn_f_tazer (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	if( w->state == 9 || w->state == 6 || w->state == 7 )
-	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-		SET_STATE(w, 1, 0.0f);
-		weapon_flash();
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-
-		if( player_fire_gun(BULLET_TRACE_DISTANCE, 0.5f, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-		}
-
-		fx_blast(XForm.Translation, wCol.Impact);
-	}
-}
-void fn_r_tazer (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 9 || w->state == 6 || w->state == 7 )
-	{
-		SET_STATE(w, 3, 0.0f);
-		game_message("Bat out");
-	}
-}
-void fn_x_tazer (weapon* w)
-{
-	if( w->state == 9 )
-	{
-		if( generate_random(2) )
-		{
-			SET_STATE(w, 6, 0.0f);
-		}
-		else
-		{
-			SET_STATE(w, 7, 0.0f);
-		}
-	}
-}
-void fn_a_tazer (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_tazer (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-		game_message("Click");
-}
-void fn_s_tazer (weapon* w, geBoolean mbnew)
-{
-	if( w->ammonution > 0 )
-	{
-		if( w->state == 9 || w->state == 6 || w->state == 7 )
-		{
-			SET_STATE(w, 2, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-			if(!cheats.unlimited_ammo) w->ammonution -= 1;
-			weapon_flash();
-			if( player_fire_gun(BULLET_TRACE_DISTANCE, 12.0f, &wIn, &wCol, w->theWeapon) )
-			{
-				bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-			}
-			fx_blast(XForm.Translation, wCol.Impact);
-		}
-	}
-	else
-	{
-		w->theWeapon->fn_noAmmo(w, mbnew);
-	}
-}
-void fn_y_tazer (weapon* w )
-{
-}
-geBoolean fn_c_tazer (weapon* w)
-{
-	return ( w->state == 9 || w->state == 6 || w->state == 7 );
-}
-float fn_l_tazer (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
 
 
 ///////////////////////////////
@@ -1940,12 +1303,12 @@ void fn_p_shotgun (weapon* w,geFloat t)
 			if( GetAsyncKeyState( controls.reload )&0x8000 && w->magasines>0 && w->ammonution!=w->theWeapon->max_ammo)
 			{
 				SET_STATE(w, 3, 0.0f);
-				soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+				soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			}
 			else
 			{
 				SET_STATE(w, 4, 0.0f );
-				soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+				soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			}
 		}
 		break;
@@ -1959,14 +1322,14 @@ void fn_p_shotgun (weapon* w,geFloat t)
 	case 5:
 		if( w->stateTime > 0.5f )
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 7, 0.0f );
 		}
 		break;
 	case 6:
 		if( w->stateTime > 0.3f )
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 8, 0.0f );
 		}
 		break;
@@ -1995,11 +1358,12 @@ void fn_f_shotgun (weapon* w, geBoolean mbnew)
 		{
 			char i;
 
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 5, 0.0f);
 			if(!cheats.unlimited_ammo) w->ammonution -= 1;
 			weapon_flash();
 
+			recoil_give(0.75f);
 			for( i= 0; i< 6; i++ )
 			{
 				if( player_fire_gun(BULLET_TRACE_DISTANCE, 40.0f, &wIn, &wCol, w->theWeapon) )
@@ -2015,10 +1379,11 @@ void fn_f_shotgun (weapon* w, geBoolean mbnew)
 		{
 			char i;
 
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 6, 0.0f);
 			if(!cheats.unlimited_ammo) w->ammonution -= 1;
 			weapon_flash();
+			recoil_give(0.50f);
 			for( i=0; i< 6; i++)
 			{
 				if( player_fire_gun(BULLET_TRACE_DISTANCE, 20.0f, &wIn, &wCol, w->theWeapon) )
@@ -2037,7 +1402,7 @@ void fn_r_shotgun (weapon* w)
 		{
 			disable_sniper();
 			SET_STATE(w, 3, 0.0f);
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 	}
 }
@@ -2048,7 +1413,7 @@ void fn_a_shotgun (weapon* w)
 {
 	w->state = 0;
 	w->stateTime = 0.0f;
-	soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+	soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 }
 void fn_n_shotgun (weapon* w, geBoolean mbnew)
 {
@@ -2088,148 +1453,6 @@ float fn_l_shotgun (weapon* w)
 
 
 //---------------------------
-// weapon #2: Mag7
-void fn_p_mag7 (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			game_message("Wanna some mag7");
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.3f )
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]) , GE_FALSE);
-			SET_STATE(w, 2, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.4f )
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
-			w->ammonution = w->theWeapon->max_ammo;
-			if( !cheats.unlimited_mag ) w->magasines--;
-			SET_STATE(w, 4, 0.0f );
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.4f )
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-			SET_STATE(w, 2, 0.0f );
-		}
-		break;
-	case 5:
-		if( w->stateTime > 1.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 6:
-		if( w->stateTime > 0.8f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for mag7\n");
-		break;
-	}
-}
-void fn_f_mag7 (weapon* w, geBoolean mbnew)
-{
-	if( w->state == 9 || w->state == 5 || w->state == 6 )
-	{
-		char i;
-		
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-		SET_STATE(w, 1, 0.0f);
-		weapon_flash();
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-		
-		for( i=0; i< 6; i++)
-		{
-			if( player_fire_gun(BULLET_TRACE_DISTANCE, 60.0f, &wIn, &wCol, w->theWeapon) )
-			{
-				bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-			}
-		}
-	}
-}
-void fn_r_mag7 (weapon* w)
-{
-	if( w->magasines > 0 )
-	{
-		if( w->state == 9 || w->state == 5 || w->state == 6 )
-		{
-			SET_STATE(w, 3, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
-		}
-	}
-}
-void fn_x_mag7 (weapon* w)
-{
-	if( w->state == 9 )
-	{
-		if( generate_random(2) )
-		{
-			SET_STATE(w, 5, 0.0f);
-		}
-		else
-		{
-			SET_STATE(w, 6, 0.0f);
-		}
-	}
-}
-void fn_a_mag7 (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-	soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-}
-void fn_n_mag7 (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	game_message("click");
-}
-void fn_s_mag7 (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_mag7 (weapon* w )
-{
-}
-geBoolean fn_c_mag7 (weapon* w)
-{
-	return ( w->state == 9 || w->state == 5 || w->state == 6 );
-}
-float fn_l_mag7 (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
-//---------------------------
 // weapon #3: Beretta 501 Sniper
 void fn_p_sniper (weapon* w,geFloat t)
 {
@@ -2250,7 +1473,7 @@ void fn_p_sniper (weapon* w,geFloat t)
 		if( w->stateTime > 0.5f )
 		{
 			SET_STATE(w, 2, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 2:
@@ -2263,14 +1486,14 @@ void fn_p_sniper (weapon* w,geFloat t)
 		if( w->stateTime > 0.6f )
 		{
 			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 4:
 		if( w->stateTime > 0.6f )
 		{
 			SET_STATE(w, 2, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			if( !cheats.unlimited_mag ) w->magasines--;
 			w->ammonution = w->theWeapon->max_ammo;
 		}
@@ -2279,7 +1502,7 @@ void fn_p_sniper (weapon* w,geFloat t)
 		if( w->stateTime > 0.4f )
 		{
 			SET_STATE(w, 6, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 		}
 		break;
 	case 6:
@@ -2310,11 +1533,12 @@ void fn_f_sniper (weapon* w, geBoolean mbnew)
 	if( mbnew )
 	if( w->state == 9 )
 	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		SET_STATE(w, 1, 0.0f );
 		weapon_flash();
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 
+		recoil_give(0.25f);
 		if( player_fire_gun(BULLET_TRACE_DISTANCE, 4.0f, &wIn, &wCol, w->theWeapon) )
 		{
 				bullet_hitObstacle(&wCol, DECALTYPE_BULLET);
@@ -2324,7 +1548,7 @@ void fn_f_sniper (weapon* w, geBoolean mbnew)
 	{
 		if( w->state == 8 )
 		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			SET_STATE(w, 5, 0.0f );
 			weapon_flash();
 			if(!cheats.unlimited_ammo) w->ammonution -= 1;
@@ -2342,7 +1566,7 @@ void fn_r_sniper (weapon* w)
 	if( w->state == 9 || w->state == 8)
 	{
 		SET_STATE(w, 3, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		disable_sniper();
 	}
 }
@@ -2383,7 +1607,7 @@ void fn_s_sniper (weapon* w, geBoolean mbnew)
 				return;
 			}
 			w->value++;
-			soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		/*if( w->state == 8 )
 		{
@@ -2406,179 +1630,6 @@ geBoolean fn_c_sniper (weapon* w)
 	return (w->state==8 || w->state==9);
 }
 float fn_l_sniper (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
-//---------------------------
-// weapon #4: Barett "Light fiffty" M82A1
-void fn_p_barett (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			w->value = 0;
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.5f )
-		{
-			SET_STATE(w, 2, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.6f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.6f )
-		{
-			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.6f )
-		{
-			SET_STATE(w, 2, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
-			if( !cheats.unlimited_mag ) w->magasines--;
-			w->ammonution = w->theWeapon->max_ammo;
-		}
-		break;
-	case 5:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 6, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
-		}
-		break;
-	case 6:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 8, 0.0f );
-		}
-		break;
-	case 8:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 8, 0.0f );
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for barett\n");
-		break;
-	}
-}
-void fn_f_barett (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	if( w->state == 9 )
-	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-		SET_STATE(w, 1, 0.0f );
-		weapon_flash();
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-
-		if( player_fire_gun(BULLET_TRACE_DISTANCE, 1.0f, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-		}
-	}
-	else
-	{
-		if( w->state == 8 )
-		{
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-			SET_STATE(w, 5, 0.0f );
-			weapon_flash();
-			if(!cheats.unlimited_ammo) w->ammonution -= 1;
-
-			if( player_fire_gun(BULLET_TRACE_DISTANCE, 0.3f, &wIn, &wCol, w->theWeapon) )
-			{
-				bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-			}
-		}
-	}
-}
-void fn_r_barett (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 9 || w->state == 8)
-	{
-		SET_STATE(w, 3, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
-		disable_sniper();
-	}
-}
-void fn_x_barett (weapon* w)
-{
-}
-void fn_a_barett (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_barett (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-		game_message("click");
-}
-void fn_s_barett (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	{
-		if( w->state == 8 || w->state == 9 ){
-			soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
-			switch( w->value ) {
-			case 0:
-				SET_STATE(w, 8, 0.0f );
-				enable_sniper( 0.5f );
-				break;
-			case 1:
-				SET_STATE(w, 8, 0.0f );
-				enable_sniper( 0.1f );
-				break;
-			case 2:
-				SET_STATE(w, 8, 0.0f );
-				enable_sniper( 0.05f );
-				break;
-			case 3:
-				SET_STATE(w, 9, 0.0f );
-				disable_sniper();
-				return;
-			}
-			w->value++;
-		}
-	}
-}
-void fn_y_barett (weapon* w )
-{
-	disable_sniper();
-}
-geBoolean fn_c_barett (weapon* w)
-{
-	return (w->state==8 || w->state==9);
-}
-float fn_l_barett (weapon* w)
 {
 	return 0.0f;
 }
@@ -2616,21 +1667,21 @@ void fn_p_smg (weapon* w,geFloat t)
 		if( w->stateTime > 0.3 )
 		{
 			SET_STATE(w, 3, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 3:
 		if( w->stateTime > 0.6 )
 		{
 			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 4:
 		if( w->stateTime > 0.6 )
 		{
 			SET_STATE(w, 5, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 			w->ammonution = w->theWeapon->max_ammo;
 			if( !cheats.unlimited_mag ) w->magasines--;
 		}
@@ -2659,10 +1710,11 @@ void fn_f_smg (weapon* w, geBoolean mbnew)
 	{
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		SET_STATE(w, 1, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 
 		weapon_flash();
 
+		recoil_give(0.25f);
 		if( player_fire_gun(BULLET_TRACE_DISTANCE, 15.0f, &wIn, &wCol, w->theWeapon) )
 		{
 			bullet_hitObstacle(&wCol, DECALTYPE_BULLET);
@@ -2675,7 +1727,7 @@ void fn_r_smg (weapon* w)
 	if( w->state == 9 )
 	{
 		SET_STATE(w, 2, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
 void fn_x_smg (weapon* w)
@@ -2737,14 +1789,14 @@ void fn_p_uzi (weapon* w,geFloat t)
 		if( w->stateTime > 0.4f )
 		{
 			SET_STATE(w, 3, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 3:
 		if( w->stateTime > 0.4f )
 		{
 			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 4:
@@ -2771,11 +1823,12 @@ void fn_f_uzi (weapon* w, geBoolean mbnew)
 {
 	if( w->state == 9 )
 	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		SET_STATE(w, 1, 0.0f );
 		weapon_flash();
 
+		recoil_give(0.50f);
 		if( player_fire_gun(BULLET_TRACE_DISTANCE, 19.0f, &wIn, &wCol, w->theWeapon) )
 		{
 			bullet_hitObstacle(&wCol, DECALTYPE_BULLET);
@@ -2788,7 +1841,7 @@ void fn_r_uzi (weapon* w)
 	if( w->state == 9 )
 	{
 		SET_STATE(w, 2, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
 void fn_x_uzi (weapon* w)
@@ -2803,7 +1856,7 @@ void fn_n_uzi (weapon* w, geBoolean mbnew)
 {
 	if( mbnew )
 	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[4]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
 void fn_s_uzi (weapon* w, geBoolean mbnew)
@@ -2821,231 +1874,6 @@ float fn_l_uzi (weapon* w)
 	return 0.0f;
 }
 //----------------------------
-
-
-//---------------------------
-// weapon #3: Ak47
-void fn_p_ak47 (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.1f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 3, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			game_message("Com' on");
-			w->ammonution = w->theWeapon->max_ammo;
-			if( !cheats.unlimited_mag ) w->magasines--;
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for ak47\n");
-		break;
-	}
-}
-void fn_f_ak47 (weapon* w, geBoolean mbnew)
-{
-	if( w->state == 9 )
-	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-		SET_STATE(w, 1, 0.0f );
-		weapon_flash();
-
-		if( player_fire_gun(BULLET_TRACE_DISTANCE, 27.0f, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-		}
-	}
-}
-void fn_r_ak47 (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 9 )
-	{
-		SET_STATE(w, 2, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-	}
-}
-void fn_x_ak47 (weapon* w)
-{
-}
-void fn_a_ak47 (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_ak47 (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	{
-		game_message("click");
-	}
-}
-void fn_s_ak47 (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_ak47 (weapon* w )
-{
-}
-geBoolean fn_c_ak47 (weapon* w)
-{
-	return ( w->state == 9 );
-}
-float fn_l_ak47 (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
-//---------------------------
-// weapon #4: Colt Commando 733
-void fn_p_commando (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	DESTROY_LIGHT();
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.08f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 3, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 4, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE );
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			game_message("Com' on");
-			w->ammonution = w->theWeapon->max_ammo;
-			if( !cheats.unlimited_mag ) w->magasines--;
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for commando\n");
-		break;
-	}
-}
-void fn_f_commando (weapon* w, geBoolean mbnew)
-{
-	if( w->state == 9 )
-	{
-		soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE );
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-		SET_STATE(w, 1, 0.0f );
-		weapon_flash();
-
-		if( player_fire_gun(BULLET_TRACE_DISTANCE, 10.0f, &wIn, &wCol, w->theWeapon) )
-		{
-			bullet_hitObstacle(&wCol, DECALTYPE_BULLETBIG);
-		}
-	}
-}
-void fn_r_commando (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 9 )
-	{
-		SET_STATE(w, 2, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE );
-	}
-}
-void fn_x_commando (weapon* w)
-{
-}
-void fn_a_commando (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-}
-void fn_n_commando (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	{
-		game_message("click");
-	}
-}
-void fn_s_commando (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_commando (weapon* w )
-{
-}
-geBoolean fn_c_commando (weapon* w)
-{
-	return ( w->state == 9 );
-}
-float fn_l_commando (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
 
 
 ///////////////////////////////
@@ -3066,7 +1894,7 @@ void fn_p_lft (weapon* w,geFloat t)
 		if( w->stateTime > 0.3f )
 		{
 			SET_STATE(w, 9, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 1:
@@ -3089,20 +1917,21 @@ void fn_p_lft (weapon* w,geFloat t)
 			w->ammonution = w->theWeapon->max_ammo;
 			if( !cheats.unlimited_mag ) w->magasines--;
 			game_message("Need a light");
+			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 9:
 		if( w->stateTime > 0.24f )
 		{
 			SET_STATE(w, 9, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE );
+			
 		}
 		break;
 	case 8:
 		if( w->stateTime > 0.2f )
 		{
 			SET_STATE(w, 9, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE );
+			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_TRUE, TYPE_STOP, 0.0f, 1.0f );
 			soundsys_stop( &(w->theWeapon->weaponSound[0]) );
 		}
 		break;
@@ -3118,7 +1947,8 @@ void fn_f_lft (weapon* w, geBoolean mbnew)
 	{
 		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		SET_STATE(w, 1, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_TRUE );
+		soundsys_stop( &(w->theWeapon->weaponSound[5]) );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_TRUE, TYPE_FAIL, 0.0f, 1.0f );
 
 		{
 			geVec3d direction;
@@ -3170,116 +2000,6 @@ float fn_l_lft (weapon* w)
 }
 //----------------------------
 
-
-//---------------------------
-// weapon #2: Heavy flame thrower
-void fn_p_flamethrower (weapon* w,geFloat t)
-{
-{
-	w->stateTime += t;
-
-	SET_POS( XForm.Translation);
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_FALSE );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.1f )
-		{
-			SET_STATE(w, 8, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 3.0f )
-		{
-			game_message("hook new ammo");
-			SET_STATE(w, 3, 0.0f );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 3.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			w->ammonution=255;
-			if( !cheats.unlimited_mag ) w->magasines--;
-			game_message("Burn baby burn");
-		}
-		break;
-	case 9:
-		if( w->stateTime > 2.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-			soundsys_play_sound( &(w->theWeapon->weaponSound[5]), GE_FALSE );
-		}
-		break;
-	case 8:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-	default:
-		printLog("Error in process state for flamethrower\n");
-		break;
-	}
-}
-}
-void fn_f_flamethrower (weapon* w, geBoolean mbnew)
-{
-	if( w->ammonution )
-	if( w->state == 9 || w->state == 8 )
-	{
-		if(!cheats.unlimited_ammo) w->ammonution -= 1;
-		SET_STATE(w, 1, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE );
-	}
-}
-void fn_r_flamethrower (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 9 )
-	{
-		game_message("Unhook old ammo");
-		SET_STATE(w, 2, 0.0f );
-	}
-}
-void fn_x_flamethrower (weapon* w)
-{
-}
-void fn_a_flamethrower (weapon* w)
-{
-	w->state = 0;
-	w->stateTime = 0.0f;
-	MAKE_LIGHT();
-	SET_POS( XForm.Translation);
-}
-void fn_n_flamethrower (weapon* w, geBoolean mbnew)
-{
-}
-void fn_s_flamethrower (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_flamethrower (weapon* w )
-{
-	DESTROY_LIGHT();
-	system_message("deApply for flamethrower");
-}
-geBoolean fn_c_flamethrower (weapon* w)
-{
-	return ( w->state == 9 );
-}
-float fn_l_flamethrower (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
 //---------------------------
 // weapon #3: Molotov cocktail
 void fn_p_molotov (weapon* w,geFloat t)
@@ -3321,8 +2041,14 @@ void fn_p_molotov (weapon* w,geFloat t)
 		}
 		break;
 	case 4:
-		if( !(GetAsyncKeyState(controls.primaryFire) & 0x8000) || w->stateTime > 10.0f )
+		if( !(GetAsyncKeyState(controls.primaryFire) & 0x8000) || w->stateTime > 1.0f )
 		{
+			{
+				geVec3d velocity;
+				geXForm3d_GetIn(&XForm, &velocity);
+				geVec3d_Scale(&velocity, w->stateTime * 1000.0f, &velocity);
+				weapon_molotov_throw(velocity, XForm.Translation );
+			}
 			SET_STATE(w, 5, 0.0f );
 			game_message("Huh");
 		}
@@ -3351,7 +2077,7 @@ void fn_f_molotov (weapon* w, geBoolean mbnew)
 	if( w->state==2 )
 	{
 		SET_STATE(w, 3, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE);
+		soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 	}
 }
 void fn_r_molotov (weapon* w)
@@ -3394,276 +2120,16 @@ float fn_l_molotov (weapon* w)
 {
 	if( w->state == 4 )
 	{
-		return ( w->stateTime / 10.0f );
+		return ( w->stateTime / 1.0f );
 	}
 	return 0.0f;
 }
 //----------------------------
-
-
-//---------------------------
-// weapon #4: Germal Signal pistol: Leuchtpistole 42
-void fn_p_signal (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 1, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 1, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 3, 0.0f );
-			game_message("Ammo out");
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 4, 0.0f );
-			game_message("Weapon is empty");
-		}
-		break;
-	case 4:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 4, 0.0f );
-		}
-		break;
-	case 5:
-		if( w->stateTime > 1.0f )
-		{
-			SET_STATE(w, 6, 0.0f );
-			game_message("Hit");
-		}
-		break;
-	case 6:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 1, 0.0f );
-			w->ammonution=1;
-			if( !cheats.unlimited_mag ) w->magasines--;
-			game_message("Kick in");
-		}
-		break;
-	case 9:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 4, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for signal\n");
-		break;
-	}
-}
-void fn_f_signal (weapon* w, geBoolean mbnew)
-{
-	//if( w->mbnew )
-	if( w->state == 1 )
-	{
-		w->ammonution -= 1;
-		SET_STATE(w, 2, 0.0f );
-		game_message("Wang");
-	}
-}
-void fn_r_signal (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 4 )
-	{
-		SET_STATE(w, 5, 0.0f );
-		game_message("Ammo in");
-	}
-}
-void fn_x_signal (weapon* w)
-{
-}
-void fn_a_signal (weapon* w)
-{
-	if( w->ammonution > 0 )
-	{
-		w->state = 0;
-	}
-	else
-	{
-		w->state = 9;
-	}
-	w->stateTime = 0.0f;
-}
-void fn_n_signal (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	{
-		game_message("press");
-	}
-}
-void fn_s_signal (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_signal (weapon* w )
-{
-}
-geBoolean fn_c_signal (weapon* w)
-{
-	return (w->state==1 || w->state==4);
-}
-float fn_l_signal (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
 
 
 ///////////////////////////////
 // class: Explosives
 ///////////////////////////////
-
-//---------------------------
-// weapon #1: m79 grenadelauncher
-void fn_p_m79 (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 1, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 1, 0.0f );
-		}
-		break;
-	case 2:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 3, 0.0f );
-			game_message("Mag out");
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 4, 0.0f );
-			game_message("Weapon is empty");
-		}
-		break;
-	case 4:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 4, 0.0f );
-		}
-		break;
-	case 5:
-		if( w->stateTime > 1.0f )
-		{
-			SET_STATE(w, 6, 0.0f );
-			game_message("Hit");
-		}
-		break;
-	case 6:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 1, 0.0f );
-			w->ammonution=1;
-			if( !cheats.unlimited_mag ) w->magasines--;
-			game_message("Kick in");
-		}
-		break;
-	case 9:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 4, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for m79\n");
-		break;
-	}
-}
-void fn_f_m79 (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	if( w->state == 1 )
-	{
-		w->ammonution -= 1;
-		SET_STATE(w, 2, 0.0f );
-		//game_message("Whoosh");
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]) , GE_FALSE);
-
-		// @@@ temporary code until we can actully shoot m79 grenades
-		{
-			geVec3d velocity;
-			geXForm3d_GetIn(&XForm, &velocity);
-			geVec3d_Scale(&velocity, 5000.0f, &velocity);
-			weapon_grenade_throw(velocity, XForm.Translation, 3.0f);
-		}
-	}
-}
-void fn_r_m79 (weapon* w)
-{
-	if( w->magasines > 0 )
-	if( w->state == 4 )
-	{
-		SET_STATE(w, 5, 0.0f );
-		game_message("Ammo in");
-	}
-}
-void fn_x_m79 (weapon* w)
-{
-}
-void fn_a_m79 (weapon* w)
-{
-	if( w->ammonution > 0 )
-	{
-		w->state = 0;
-	}
-	else
-	{
-		w->state = 9;
-	}
-	w->stateTime = 0.0f;
-}
-void fn_n_m79 (weapon* w, geBoolean mbnew)
-{
-	if( mbnew )
-	{
-		game_message("press");
-	}
-}
-void fn_s_m79 (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_m79 (weapon* w )
-{
-}
-geBoolean fn_c_m79 (weapon* w)
-{
-	return (w->state==1 || w->state==4);
-}
-float fn_l_m79 (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
 
 //---------------------------
 // weapon #2: l2a2 grenade
@@ -3735,7 +2201,7 @@ void fn_f_grenade (weapon* w, geBoolean mbnew)
 	if( w->state==2 )
 	{
 		SET_STATE(w, 3, 0.0f );
-		soundsys_play_sound( &(w->theWeapon->weaponSound[0]) , GE_FALSE);
+		soundsys_play_sound( &(w->theWeapon->weaponSound[0]) , GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 	}
 }
 void fn_r_grenade (weapon* w)
@@ -3784,10 +2250,12 @@ float fn_l_grenade (weapon* w)
 
 
 //---------------------------
-// weapon #3: c4
-void fn_p_c4 (weapon* w,geFloat t)
+// weapon #3: mini-rocket
+void fn_p_miniRocket (weapon* w,geFloat t)
 {
 	w->stateTime += t;
+
+	DESTROY_LIGHT();
 
 	switch(w->state)
 	{
@@ -3798,24 +2266,32 @@ void fn_p_c4 (weapon* w,geFloat t)
 		}
 		break;
 	case 1:
-		if( w->stateTime > 0.4f )
+		if( w->stateTime > 0.1f )
 		{
 			SET_STATE(w, 9, 0.0f );
-			if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		}
 		break;
 	case 2:
 		if( w->stateTime > 0.4f )
 		{
-			SET_STATE(w, 9, 0.0f );
-			w->ammonution=1;
-			if( !cheats.unlimited_mag ) w->magasines--;
+			SET_STATE(w, 3, 0.0f );
+			//soundsys_play_sound( &(w->theWeapon->weaponSound[0]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 		}
 		break;
 	case 3:
 		if( w->stateTime > 0.4f )
 		{
+			SET_STATE(w, 4, 0.0f );
+			//soundsys_play_sound( &(w->theWeapon->weaponSound[3]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
+		}
+		break;
+	case 4:
+		if( w->stateTime > 0.4f )
+		{
 			SET_STATE(w, 9, 0.0f );
+			game_message("Reloaded");
+			w->ammonution = w->theWeapon->max_ammo;
+			if( !cheats.unlimited_mag ) w->magasines--;
 		}
 		break;
 	case 9:
@@ -3824,175 +2300,79 @@ void fn_p_c4 (weapon* w,geFloat t)
 			SET_STATE(w, 9, 0.0f );
 		}
 		break;
-	
 	default:
-		printLog("Error in process state for c4\n");
+		printLog("Error in process state for minirocket\n");
 		break;
 	}
 }
-void fn_f_c4 (weapon* w, geBoolean mbnew)
+
+void fn_f_miniRocket (weapon* w, geBoolean mbnew)
 {
-	if( mbnew )
 	if( w->state == 9 )
 	{
-		game_message("Place");
+		//soundsys_play_sound( &(w->theWeapon->weaponSound[2]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
+		if(!cheats.unlimited_ammo) w->ammonution -= 1;
 		SET_STATE(w, 1, 0.0f );
+		weapon_flash();
+
+		recoil_give(0.50f);
+		//weapon_mini_rocket_throw(wIn, XForm.Translation);
+		{
+			geVec3d velocity;
+			geXForm3d_GetIn(&XForm, &velocity);
+			geVec3d_Scale(&velocity, 2500.0f, &velocity);
+			weapon_mini_rocket_throw(velocity, XForm.Translation);
+		}
 	}
 }
-void fn_r_c4 (weapon* w)
+
+void fn_r_miniRocket (weapon* w)
 {
 	if( w->magasines > 0 )
-	if(w->state == 9 )
+	if( w->state == 9 )
 	{
-		game_message("Grabbing new");
 		SET_STATE(w, 2, 0.0f );
+		soundsys_play_sound( &(w->theWeapon->weaponSound[1]), GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 	}
 }
-void fn_x_c4 (weapon* w)
+
+void fn_x_miniRocket (weapon* w)
 {
 }
-void fn_a_c4 (weapon* w)
+
+void fn_a_miniRocket (weapon* w)
 {
 	w->state = 0;
 	w->stateTime = 0.0f;
 }
-void fn_n_c4 (weapon* w, geBoolean mbnew)
-{
-}
-void fn_s_c4 (weapon* w, geBoolean mbnew)
+
+void fn_n_miniRocket (weapon* w, geBoolean mbnew)
 {
 	if( mbnew )
-	if( w->state==9 )
 	{
-		SET_STATE(w, 3, 0.0f );
-		game_message("Biip");
+		game_message("click");
 	}
 }
-void fn_y_c4 (weapon* w )
+
+void fn_s_miniRocket (weapon* w, geBoolean mbnew)
 {
 }
-geBoolean fn_c_c4 (weapon* w)
+
+void fn_y_miniRocket (weapon* w )
 {
-	return (w->state == 9);
 }
-float fn_l_c4 (weapon* w)
+
+geBoolean fn_c_miniRocket (weapon* w)
+{
+	return ( w->state == 9 );
+}
+
+float fn_l_miniRocket (weapon* w)
 {
 	return 0.0f;
 }
+
 //----------------------------
-
-
-//---------------------------
-// weapon #4: PMA-2 plastic personal mine
-void fn_p_mine (weapon* w,geFloat t)
-{
-	w->stateTime += t;
-
-	switch(w->state)
-	{
-	case 0:
-		if( w->stateTime > 0.3f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	case 1:
-		if( w->stateTime > 0.4f )
-		{
-			SET_STATE(w, 2, 0.0f );
-			game_message("empty hands");
-		}
-		break;
-	case 2:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 2, 0.0f );
-		}
-		break;
-	case 3:
-		if( w->stateTime > 0.4 )
-		{
-			SET_STATE(w, 9, 0.0f );
-			game_message("Ready for r n' r");
-			w->ammonution = 1;
-			if( !cheats.unlimited_mag ) w->magasines--;
-		}
-		break;
-	case 4:
-		if( w->stateTime > 0.3 )
-		{
-			SET_STATE(w, 2, 0.0f );
-		}
-		break;
-	case 9:
-		if( w->stateTime > 10.0f )
-		{
-			SET_STATE(w, 9, 0.0f );
-		}
-		break;
-	default:
-		printLog("Error in process state for mine\n");
-		break;
-	}
-}
-void fn_f_mine (weapon* w, geBoolean mbnew)
-{
-	if( w->state == 9 )
-	{
-		game_message("Placing");
-		SET_STATE(w, 1, 0.0f );
-		w->ammonution -= 1;
-	}
-}
-void fn_r_mine (weapon* w)
-{
-	//game_message("abc");
-	if( w->magasines > 0 )
-	{
-		//game_message("def");
-		if( w->state == 2 )
-		{
-			SET_STATE(w, 3, 0.0f );
-			game_message("Grabbing new");
-		}
-	}
-}
-void fn_x_mine (weapon* w)
-{
-}
-void fn_a_mine (weapon* w)
-{
-	if( w->ammonution )
-	{
-		w->state = 0;
-	}
-	else
-	{
-		w->state = 4;
-	}
-	w->stateTime = 0.0f;
-}
-void fn_n_mine (weapon* w, geBoolean mbnew)
-{
-}
-void fn_s_mine (weapon* w, geBoolean mbnew)
-{
-}
-void fn_y_mine (weapon* w )
-{
-}
-geBoolean fn_c_mine (weapon* w)
-{
-	return (w->state==2 || w->state==9);
-}
-float fn_l_mine (weapon* w)
-{
-	return 0.0f;
-}
-//----------------------------
-
-
-
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -4003,13 +2383,9 @@ void apply_weapon()
 {
 	if( current_weapon )
 	{
-		if( current_weapon->theWeapon->fn_changeable(current_weapon) )
+		if(! (current_weapon->theWeapon->fn_changeable(current_weapon)) )
 		{
-			//game_message("Changing weapon approved");
-		}
-		else
-		{
-			game_message("Changing weapon denied");
+			// game_message("Changing weapon denied"); // @@@todo@@@: is it really needed to output this, since 3d will be obvious enough
 			return;
 		}
 
@@ -4019,28 +2395,22 @@ void apply_weapon()
 
 	if( current_weapon )
 	{
-		char doit = 1;
-
 		if( current_weapon->number_of_weapons <= 0 )
 		{
 			selClass = WEAPON_C_COMBATS;
 			selWeapon = 0;
 			current_weapon = & (weapons[selClass][selWeapon] );
 			
-
 			if( !current_weapon)
 			{
 				system_message("WARNING: current_weapon is null when changing weapon to default hand");
-				doit = 0;
+				return;
 			}
 		}
 
-		if(doit)
-		{
-			current_weapon->theWeapon->fn_applyWeapon(current_weapon);
-			currClass = selClass;
-			currWeapon = selWeapon;
-		}
+		current_weapon->theWeapon->fn_applyWeapon(current_weapon);
+		currClass = selClass;
+		currWeapon = selWeapon;
 	}
 	else
 	{
@@ -4066,7 +2436,7 @@ void weapon_deapply()
 		}
 		else
 		{
-			game_message("Changing weapon denied");
+			//game_message("Changing weapon denied");
 			return;
 		}
 
@@ -4076,24 +2446,20 @@ void weapon_deapply()
 }
 
 
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //		enable_selector(internal function)
 //			enables the showing of the graphical 2d wiev of the weapons
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void enable_selector()
 {
+	if( !open_sec )
+		selectorState = 1;
 	open_sec = WEAPON_OPEN_SEC;
 	set_y_shift(18);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-
-
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //		disable_selector(internal function)
@@ -4101,12 +2467,19 @@ void enable_selector()
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void disable_selector()
 {
-	open_sec = 0;
-	set_y_shift(0);
+	if( selectorState !=0 ){
+		selectorState = 3;
+//		game_message("Disable selector");
+		open_sec = 0;
+		set_y_shift(0);
+	}
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+void selector_classChange(){
+	//game_message("Class change");
+	selectorState = 4;
+}
 
 
 
@@ -4161,7 +2534,9 @@ void weapon_fire( geBoolean mbnew)
 				if( !weapon_water() ) really = 0;
 
 			}
-			if( really ) current_weapon->theWeapon->fn_fireWeapon(current_weapon, mbnew);
+			if( really ){
+				current_weapon->theWeapon->fn_fireWeapon(current_weapon, mbnew);
+			}
 		}
 	}
 	else
@@ -4173,6 +2548,9 @@ void weapon_fire( geBoolean mbnew)
 
 void weapon_newWorld(geWorld* world){
 	weapon_grenade_newWorld(world);
+	weapon_molotov_newWorld(world);
+	//weapon_igrenade_newWorld(world);
+	weapon_mini_rocket_newWorld(world);
 }
 
 /*
@@ -4223,8 +2601,8 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_hand ;
 	wt->fn_renderLine	=	fn_l_hand ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\hands\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\hands\\fire2.wav", &(wt->weaponSound[2]) );
+	soundsys_loadSound(".\\sfx\\weapon\\hands\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\hands\\fire2.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
@@ -4258,82 +2636,14 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_knife ;
 	wt->fn_renderLine	=	fn_l_knife ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\knife\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\knife\\fire2.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\knife\\fire3.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\knife\\fire4.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\knife\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\knife\\fire2.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\knife\\fire3.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\knife\\fire4.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
-	//--------------------------------------------------------------------------------------------------------------------
-	//Hammer
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 0;
-	sprintf(wt->name, "10lb sledge hammer");
-	wt->unlimited_ammo = GE_TRUE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\hammer.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\hammer.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\hammer.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_TRUE;
-	wt->mag = 0;
-	wt->mod_acc = 1.0f;
-	wt->damage = 15;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
 	
-	wt->fn_processState	=	fn_p_hammer ;
-	wt->fn_fireWeapon	=	fn_f_hammer ;
-	wt->fn_reloadWeapon =	fn_r_hammer ;
-	wt->fn_fxMotion		=	fn_x_hammer ;
-	wt->fn_applyWeapon	=	fn_a_hammer ;
-	wt->fn_noAmmo		=	fn_n_hammer ;
-	wt->fn_secondFire	=	fn_s_hammer ;
-	wt->fn_deApply		=	fn_y_hammer ;
-	wt->fn_changeable	=	fn_c_hammer ;
-	wt->fn_renderLine	=	fn_l_hammer ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\hammer\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\hammer\\fire2.wav", &(wt->weaponSound[2]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Axe
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 0;
-	sprintf(wt->name, "Flathead axe");
-	wt->unlimited_ammo = GE_TRUE;
-	//wt->sound = load_sound(".\\sound\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\axe.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\axe.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\axe.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_TRUE;
-	wt->mag = 0;
-	wt->mod_acc = 1.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_axe ;
-	wt->fn_fireWeapon	=	fn_f_axe ;
-	wt->fn_reloadWeapon =	fn_r_axe ;
-	wt->fn_fxMotion		=	fn_x_axe ;
-	wt->fn_applyWeapon	=	fn_a_axe ;
-	wt->fn_noAmmo		=	fn_n_axe ;
-	wt->fn_secondFire	=	fn_s_axe ;
-	wt->fn_deApply		=	fn_y_axe ;
-	wt->fn_changeable	=	fn_c_axe ;
-	wt->fn_renderLine	=	fn_l_axe ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\axe\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\axe\\fire2.wav", &(wt->weaponSound[2]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//PISTOLS
@@ -4371,10 +2681,10 @@ int setup_weaponTypes(){
 	wt->fn_renderLine	=	fn_l_9mm ;
 
 
-	soundsys_loadWaw(".\\sfx\\weapon\\9mm\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\9mm\\clipin.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\9mm\\clipout.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\9mm\\click.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\9mm\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\9mm\\clipin.wav", 1, &(wt->weaponSound[2]) , 0, TYPE_2D);
+	soundsys_loadSound(".\\sfx\\weapon\\9mm\\clipout.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\9mm\\click.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
@@ -4408,79 +2718,12 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_eagle ;
 	wt->fn_renderLine	=	fn_l_eagle ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\deagle\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\deagle\\clipin.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\deagle\\clipout.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\deagle\\click.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\deagle\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\deagle\\clipin.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\deagle\\clipout.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\deagle\\click.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved tazer
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_FALSE;
-	wt->max_ammo = 10;
-	sprintf(wt->name, "Improved tazer");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".//sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\improved_tazer.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\improved_tazer.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\improved_tazer.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 12;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_ELECTRICAL;
-	wt->ap = GE_TRUE;
-	
-	wt->fn_processState	=	fn_p_tazer ;
-	wt->fn_fireWeapon	=	fn_f_tazer ;
-	wt->fn_reloadWeapon =	fn_r_tazer ;
-	wt->fn_fxMotion		=	fn_x_tazer ;
-	wt->fn_applyWeapon	=	fn_a_tazer ;
-	wt->fn_noAmmo		=	fn_n_tazer ;
-	wt->fn_secondFire	=	fn_s_tazer ;
-	wt->fn_deApply		=	fn_y_tazer ;
-	wt->fn_changeable	=	fn_c_tazer ;
-	wt->fn_renderLine	=	fn_l_tazer ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\tazer\\beep.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\tazer\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\tazer\\reload.wav", &(wt->weaponSound[2]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved tranqualizer
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_FALSE;
-	wt->max_ammo = 1;
-	sprintf(wt->name, "Improved Tranqualizer");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\improved_tranqualizer.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\improved_tranqualizer.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\improved_tranqualizer.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 30;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_tranqualizer ;
-	wt->fn_fireWeapon	=	fn_f_tranqualizer ;
-	wt->fn_reloadWeapon =	fn_r_tranqualizer ;
-	wt->fn_fxMotion		=	fn_x_tranqualizer ;
-	wt->fn_applyWeapon	=	fn_a_tranqualizer ;
-	wt->fn_noAmmo		=	fn_n_tranqualizer ;
-	wt->fn_secondFire	=	fn_s_tranqualizer ;
-	wt->fn_deApply		=	fn_y_tranqualizer ;
-	wt->fn_changeable	=	fn_c_tranqualizer ;
-	wt->fn_renderLine	=	fn_l_tranqualizer ;
-	//--------------------------------------------------------------------------------------------------------------------
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//RIFLES
@@ -4516,48 +2759,10 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_shotgun ;
 	wt->fn_renderLine	=	fn_l_shotgun ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\shotgun\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\shotgun\\bulletin.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\shotgun\\chakka.wav", &(wt->weaponSound[3]) );
+	soundsys_loadSound(".\\sfx\\weapon\\shotgun\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\shotgun\\bulletin.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\shotgun\\chakka.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Mag 7
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 5;
-	sprintf(wt->name, "Mag7");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\mag7.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\mag7.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\mag7.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 25;
-	wt->mod_acc = 200.0f;
-	wt->damage = 13;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_mag7 ;
-	wt->fn_fireWeapon	=	fn_f_mag7 ;
-	wt->fn_reloadWeapon =	fn_r_mag7 ;
-	wt->fn_fxMotion		=	fn_x_mag7 ;
-	wt->fn_applyWeapon	=	fn_a_mag7 ;
-	wt->fn_noAmmo		=	fn_n_mag7 ;
-	wt->fn_secondFire	=	fn_s_mag7 ;
-	wt->fn_deApply		=	fn_y_mag7 ;
-	wt->fn_changeable	=	fn_c_mag7 ;
-	wt->fn_renderLine	=	fn_l_mag7 ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\mag7\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\mag7\\chakka.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\mag7\\clipin.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\mag7\\clipout.wav", &(wt->weaponSound[4]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//Sniper rifle
@@ -4589,49 +2794,11 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_sniper ;
 	wt->fn_renderLine	=	fn_l_sniper ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\sniper\\zoom.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\sniper\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\sniper\\clipin.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\sniper\\clipout.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\sniper\\bolt.wav", &(wt->weaponSound[4]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved sniper rifle
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 10;
-	sprintf(wt->name, "Barret \"Light fiffty\" M82A1");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\improved_sniper_rifle.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\improved_sniper_rifle.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\improved_sniper_rifle.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 5;
-	wt->mod_acc = 200.0f;
-	wt->damage = 40;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_TRUE;
-	
-	wt->fn_processState	=	fn_p_barett ;
-	wt->fn_fireWeapon	=	fn_f_barett ;
-	wt->fn_reloadWeapon =	fn_r_barett ;
-	wt->fn_fxMotion		=	fn_x_barett ;
-	wt->fn_applyWeapon	=	fn_a_barett ;
-	wt->fn_noAmmo		=	fn_n_barett ;
-	wt->fn_secondFire	=	fn_s_barett ;
-	wt->fn_deApply		=	fn_y_barett ;
-	wt->fn_changeable	=	fn_c_barett ;
-	wt->fn_renderLine	=	fn_l_barett ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\barett\\zoom.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\barett\\fire.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\barett\\clipin.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\barett\\clipout.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\barett\\boltpull.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\sniper\\zoom.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\sniper\\fire.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\sniper\\clipin.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\sniper\\clipout.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\sniper\\bolt.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
@@ -4669,11 +2836,11 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_smg ;
 	wt->fn_renderLine	=	fn_l_smg ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\smg\\fire.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\smg\\clipin.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\smg\\clipout.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\smg\\boltslap.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\smg\\boltpull.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\smg\\fire.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\smg\\clipin.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\smg\\clipout.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\smg\\boltslap.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\smg\\boltpull.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
@@ -4707,86 +2874,13 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_uzi ;
 	wt->fn_renderLine	=	fn_l_uzi ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\uzi\\fire.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\uzi\\clipin.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\uzi\\clipout.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\uzi\\slidepull.wav", &(wt->weaponSound[3]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\uzi\\empty.wav", &(wt->weaponSound[4]) );
+	soundsys_loadSound(".\\sfx\\weapon\\uzi\\fire.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\uzi\\clipin.wav", 1, &(wt->weaponSound[1]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\uzi\\clipout.wav", 1, &(wt->weaponSound[2]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\uzi\\slidepull.wav", 1, &(wt->weaponSound[3]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\uzi\\empty.wav", 1, &(wt->weaponSound[4]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Assult rifle
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 30;
-	sprintf(wt->name, "Ak47");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\ak47.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\ak47.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\ak47.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 10;
-	wt->mod_acc = 200.0f;
-	wt->damage = 17;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_TRUE;
-	
-	wt->fn_processState	=	fn_p_ak47 ;
-	wt->fn_fireWeapon	=	fn_f_ak47 ;
-	wt->fn_reloadWeapon =	fn_r_ak47 ;
-	wt->fn_fxMotion		=	fn_x_ak47 ;
-	wt->fn_applyWeapon	=	fn_a_ak47 ;
-	wt->fn_noAmmo		=	fn_n_ak47 ;
-	wt->fn_secondFire	=	fn_s_ak47 ;
-	wt->fn_deApply		=	fn_y_ak47 ;
-	wt->fn_changeable	=	fn_c_ak47 ;
-	wt->fn_renderLine	=	fn_l_ak47 ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\ak47\\fire.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\ak47\\clipin.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\ak47\\clipout.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\ak47\\slideback.wav", &(wt->weaponSound[3]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Advanced assult rifle
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 60;
-	sprintf(wt->name, "Colt commando 733");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\commando.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\commando.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\commando.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 10;
-	wt->mod_acc = 200.0f;
-	wt->damage = 15;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_TRUE;
-	
-	wt->fn_processState	=	fn_p_commando ;
-	wt->fn_fireWeapon	=	fn_f_commando ;
-	wt->fn_reloadWeapon =	fn_r_commando ;
-	wt->fn_fxMotion		=	fn_x_commando ;
-	wt->fn_applyWeapon	=	fn_a_commando ;
-	wt->fn_noAmmo		=	fn_n_commando ;
-	wt->fn_secondFire	=	fn_s_commando ;
-	wt->fn_deApply		=	fn_y_commando ;
-	wt->fn_changeable	=	fn_c_commando ;
-	wt->fn_renderLine	=	fn_l_commando ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\commando\\clipin.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\commando\\clipout.wav", &(wt->weaponSound[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\commando\\fire.wav", &(wt->weaponSound[2]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\commando\\boltpull.wav", &(wt->weaponSound[3]) );
-	//--------------------------------------------------------------------------------------------------------------------
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//FLAMES
@@ -4822,45 +2916,9 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_lft ;
 	wt->fn_renderLine	=	fn_l_lft ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\lft\\fire.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\lft\\idle.wav", &(wt->weaponSound[5]) );
+	soundsys_loadSound(".\\sfx\\weapon\\lft\\fire.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\weapon\\lft\\idle.wav", 1, &(wt->weaponSound[5]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved flamethrower
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 255;
-	sprintf(wt->name, "Heavy flamethrower");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\heavy_flamethrower.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\heavy_flamethrower.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\heavy_flamethrower.bmp");
-	wt->showBar = GE_TRUE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 2;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_flamethrower ;
-	wt->fn_fireWeapon	=	fn_f_flamethrower ;
-	wt->fn_reloadWeapon =	fn_r_flamethrower ;
-	wt->fn_fxMotion		=	fn_x_flamethrower ;
-	wt->fn_applyWeapon	=	fn_a_flamethrower ;
-	wt->fn_noAmmo		=	fn_n_flamethrower ;
-	wt->fn_secondFire	=	fn_s_flamethrower ;
-	wt->fn_deApply		=	fn_y_flamethrower ;
-	wt->fn_changeable	=	fn_c_flamethrower ;
-	wt->fn_renderLine	=	fn_l_flamethrower ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\flamethrower\\fire.wav", &(wt->weaponSound[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\flamethrower\\idle.wav", &(wt->weaponSound[5]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//Molotov cocktail
@@ -4892,78 +2950,12 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_molotov ;
 	wt->fn_renderLine	=	fn_l_molotov ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\molotov\\light.wav", &(wt->weaponSound[0]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Signalpistol
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_FALSE;
-	wt->max_ammo = 1;
-	sprintf(wt->name, "Leuchtpistole 42");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\signal_pistol.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\signal_pistol.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\signal_pistol.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 5;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_signal ;
-	wt->fn_fireWeapon	=	fn_f_signal ;
-	wt->fn_reloadWeapon =	fn_r_signal ;
-	wt->fn_fxMotion		=	fn_x_signal ;
-	wt->fn_applyWeapon	=	fn_a_signal ;
-	wt->fn_noAmmo		=	fn_n_signal ;
-	wt->fn_secondFire	=	fn_s_signal ;
-	wt->fn_deApply		=	fn_y_signal ;
-	wt->fn_changeable	=	fn_c_signal ;
-	wt->fn_renderLine	=	fn_l_signal ;
+	soundsys_loadSound(".\\sfx\\weapon\\molotov\\light.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//Explosives
 	//--------------------------------------------------------------------------------------------------------------------
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Grenade launcher
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_FALSE;
-	wt->max_ammo = 1;
-	sprintf(wt->name, "m79 Grenade launcher");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\grenade_launcher.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\grenade_launcher.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\grenade_launcher.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 5;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_m79 ;
-	wt->fn_fireWeapon	=	fn_f_m79 ;
-	wt->fn_reloadWeapon =	fn_r_m79 ;
-	wt->fn_fxMotion		=	fn_x_m79 ;
-	wt->fn_applyWeapon	=	fn_a_m79 ;
-	wt->fn_noAmmo		=	fn_n_m79 ;
-	wt->fn_secondFire	=	fn_s_m79 ;
-	wt->fn_deApply		=	fn_y_m79 ;
-	wt->fn_changeable	=	fn_c_m79 ;
-	wt->fn_renderLine	=	fn_l_m79 ;
-
-	soundsys_loadWaw(".\\sfx\\weapon\\launcher\\fire.wav", &(wt->weaponSound[0]) );
-	//--------------------------------------------------------------------------------------------------------------------
-
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//Grenade
@@ -4995,72 +2987,39 @@ int setup_weaponTypes(){
 	wt->fn_changeable	=	fn_c_grenade ;
 	wt->fn_renderLine	=	fn_l_grenade ;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\grenade\\sprintout.wav", &(wt->weaponSound[0]) );
+	soundsys_loadSound(".\\sfx\\weapon\\grenade\\sprintout.wav", 1, &(wt->weaponSound[0]), 0, TYPE_2D );
 	//--------------------------------------------------------------------------------------------------------------------
 
 
 	//--------------------------------------------------------------------------------------------------------------------
-	//c4
+	//miniRocket
 	wt = & ( weaponTypes[i] ); i++;
 	wt->hold_fire = GE_FALSE;
-	wt->max_ammo = 1;
-	sprintf(wt->name, "C4");
+	wt->max_ammo = 15;
+	sprintf(wt->name, "Mini rockets");
 	wt->unlimited_ammo = GE_FALSE;
 	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\c4.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\c4.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\c4.bmp");
+	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\miniRocket.bmp");
+	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\miniRocket.bmp");
+	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\miniRocket.bmp");
 	wt->showBar = GE_FALSE;
 	wt->inWater = GE_FALSE;
-	wt->mag = 5;
+	wt->mag = 20;
 	wt->mod_acc = 200.0f;
 	wt->damage = 10;
 	wt->damageType = DAMAGE_NORMAL;
 	wt->ap = GE_FALSE;
 	
-	wt->fn_processState	=	fn_p_c4 ;
-	wt->fn_fireWeapon	=	fn_f_c4 ;
-	wt->fn_reloadWeapon =	fn_r_c4 ;
-	wt->fn_fxMotion		=	fn_x_c4 ;
-	wt->fn_applyWeapon	=	fn_a_c4 ;
-	wt->fn_noAmmo		=	fn_n_c4 ;
-	wt->fn_secondFire	=	fn_s_c4 ;
-	wt->fn_deApply		=	fn_y_c4 ;
-	wt->fn_changeable	=	fn_c_c4 ;
-	wt->fn_renderLine	=	fn_l_c4 ;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Mine
-	wt = & ( weaponTypes[i] ); i++;
-	wt->hold_fire = GE_TRUE;
-	wt->max_ammo = 1;
-	sprintf(wt->name, "PMA-2 plastic personal mine");
-	wt->unlimited_ammo = GE_FALSE;
-	//wt->sound = load_sound(".\\sound\\weapons\\9mm.wav");
-	wt->s_icon = LoadBmp(".\\gfx\\weapons\\s\\mine.bmp");
-	wt->u_icon = LoadBmp(".\\gfx\\weapons\\u\\mine.bmp");
-	wt->n_icon = LoadBmp(".\\gfx\\weapons\\n\\mine.bmp");
-	wt->showBar = GE_FALSE;
-	wt->inWater = GE_FALSE;
-	wt->mag = 10;
-	wt->mod_acc = 200.0f;
-	wt->damage = 10;
-	wt->damageType = DAMAGE_NORMAL;
-	wt->ap = GE_FALSE;
-	
-	wt->fn_processState	=	fn_p_mine ;
-	wt->fn_fireWeapon	=	fn_f_mine ;
-	wt->fn_reloadWeapon =	fn_r_mine ;
-	wt->fn_fxMotion		=	fn_x_mine ;
-	wt->fn_applyWeapon	=	fn_a_mine ;
-	wt->fn_noAmmo		=	fn_n_mine ;
-	wt->fn_secondFire	=	fn_s_mine ;
-	wt->fn_deApply		=	fn_y_mine ;
-	wt->fn_changeable	=	fn_c_mine ;
-	wt->fn_renderLine	=	fn_l_mine ;
+	wt->fn_processState	=	fn_p_miniRocket ;
+	wt->fn_fireWeapon	=	fn_f_miniRocket ;
+	wt->fn_reloadWeapon =	fn_r_miniRocket ;
+	wt->fn_fxMotion		=	fn_x_miniRocket ;
+	wt->fn_applyWeapon	=	fn_a_miniRocket ;
+	wt->fn_noAmmo		=	fn_n_miniRocket ;
+	wt->fn_secondFire	=	fn_s_miniRocket ;
+	wt->fn_deApply		=	fn_y_miniRocket ;
+	wt->fn_changeable	=	fn_c_miniRocket ;
+	wt->fn_renderLine	=	fn_l_miniRocket ;
 	//--------------------------------------------------------------------------------------------------------------------
 
 	printLog("Weapon type:\n");
@@ -5105,13 +3064,28 @@ geBoolean weapon_init()
 
 	sniper_enabled = 0;
 
-	soundsys_loadWaw(".\\sfx\\weapon\\ric1.wav", &(ric[0]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\ric2.wav", &(ric[1]) );
-	soundsys_loadWaw(".\\sfx\\weapon\\bang.wav", &explosion_sound);
+	soundsys_loadSound(".\\sfx\\weapon\\ric1.wav", 1, &(ric[0]), 1, TYPE_3D );
+	soundsys_loadSound(".\\sfx\\weapon\\ric2.wav", 1, &(ric[1]), 1, TYPE_3D );
+	soundsys_loadSound(".\\sfx\\weapon\\bang.wav", 1, &explosion_sound, 1, TYPE_3D);
 
 	if( !weapon_grenade_init() ){
 		printLog("Failed to init weapons grenade.\n");
 		error("Failed to init weapons grenade");
+		return GE_FALSE;
+	}
+	if( !weapon_molotov_init() ){
+		printLog("Failed to init weapons molotov.\n");
+		error("Failed to init weapons molotov");
+		return GE_FALSE;
+	}
+	/*if( !weapon_igrenade_init() ){
+		printLog("Failed to init weapons igrenade.\n");
+		error("Failed to init weapons igrenade");
+		return GE_FALSE;
+	}*/
+	if( !weapon_mini_rocket_init() ){
+		printLog("Failed to init weapons mini rocket.\n");
+		error("Failed to init weapons mini rocket");
 		return GE_FALSE;
 	}
 
@@ -5176,33 +3150,6 @@ geBoolean weapon_init()
 	current_weapon->number_of_weapons = 1;
 	//--------------------------------------------------------------------------------------------------------------------
 
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Hammer
-	current_weapon = & (weapons[WEAPON_C_COMBATS][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	current_weapon->number_of_weapons = 1;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Axe
-	current_weapon = & (weapons[WEAPON_C_COMBATS][3] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	current_weapon->number_of_weapons = 1;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
 	//--------------------------------------------------------------------------------------------------------------------
 	//PISTOLS
 	//--------------------------------------------------------------------------------------------------------------------
@@ -5233,29 +3180,6 @@ geBoolean weapon_init()
 
 
 	//--------------------------------------------------------------------------------------------------------------------
-	//Improved tazer
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved trancalizer
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][3] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-	//--------------------------------------------------------------------------------------------------------------------
 	//RIFLES
 	//--------------------------------------------------------------------------------------------------------------------
 
@@ -5270,9 +3194,8 @@ geBoolean weapon_init()
 	current_weapon->value = 0;
 	//--------------------------------------------------------------------------------------------------------------------
 
-
 	//--------------------------------------------------------------------------------------------------------------------
-	//Mag 7
+	//Sniper rifle
 	current_weapon = & (weapons[WEAPON_C_RIFLES][1] );
 	current_weapon->theWeapon = & weaponTypes[i]; i++;
 	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
@@ -5281,31 +3204,6 @@ geBoolean weapon_init()
 	current_weapon->stateTime = 0.0f;
 	current_weapon->value = 0;
 	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Sniper rifle
-	current_weapon = & (weapons[WEAPON_C_RIFLES][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved sniper rifle
-	current_weapon = & (weapons[WEAPON_C_RIFLES][3] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
 
 	//--------------------------------------------------------------------------------------------------------------------
 	//Automatics
@@ -5334,30 +3232,6 @@ geBoolean weapon_init()
 	current_weapon->value = 0;
 	//--------------------------------------------------------------------------------------------------------------------
 
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Assult rifle
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Advanced assult rifle
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][3] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
 	//--------------------------------------------------------------------------------------------------------------------
 	//FLAMES
 	//--------------------------------------------------------------------------------------------------------------------
@@ -5373,34 +3247,9 @@ geBoolean weapon_init()
 	current_weapon->value = 0;
 	//--------------------------------------------------------------------------------------------------------------------
 
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Improved flamethrower
-	current_weapon = & (weapons[WEAPON_C_FLAMES][1] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
 	//--------------------------------------------------------------------------------------------------------------------
 	//Molotov cocktail
-	current_weapon = & (weapons[WEAPON_C_FLAMES][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Signalpistol
-	current_weapon = & (weapons[WEAPON_C_FLAMES][3] );
+	current_weapon = & (weapons[WEAPON_C_FLAMES][1] );
 	current_weapon->theWeapon = & weaponTypes[i]; i++;
 	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
 	current_weapon->magasines = current_weapon->theWeapon->mag;
@@ -5414,7 +3263,7 @@ geBoolean weapon_init()
 	//--------------------------------------------------------------------------------------------------------------------
 
 	//--------------------------------------------------------------------------------------------------------------------
-	//Grenade launcher
+	//Grenade
 	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][0] );
 	current_weapon->theWeapon = & weaponTypes[i]; i++;
 	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
@@ -5426,33 +3275,8 @@ geBoolean weapon_init()
 
 
 	//--------------------------------------------------------------------------------------------------------------------
-	//Grenade
+	//miniRocket
 	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][1] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//c4
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][2] );
-	current_weapon->theWeapon = & weaponTypes[i]; i++;
-	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-	current_weapon->magasines = current_weapon->theWeapon->mag;
-	current_weapon->state = 0;
-	current_weapon->stateTime = 0.0f;
-	current_weapon->value = 0;
-	//--------------------------------------------------------------------------------------------------------------------
-
-
-
-	//--------------------------------------------------------------------------------------------------------------------
-	//Mine
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][3] );
 	current_weapon->theWeapon = & weaponTypes[i]; i++;
 	current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
 	current_weapon->magasines = current_weapon->theWeapon->mag;
@@ -5619,6 +3443,7 @@ void weapon_select(unsigned char number)
 		{
 			selClass = number;
 			selWeapon = 0;
+			selector_classChange();
 		}
 		return;
 	}
@@ -5633,6 +3458,7 @@ void weapon_select(unsigned char number)
 	{
 		selClass = number;
 		selWeapon = 0;
+		selector_classChange();
 	}
 }
 
@@ -5642,9 +3468,42 @@ void weapon_select(unsigned char number)
 void weapon_tick()
 {
 	weapon_grenade_proccess(TIME * enemyTime);
+	weapon_molotov_proccess(TIME * enemyTime);
+	weapon_mini_rocket_proccess(TIME * enemyTime);
 	if( current_weapon )
 	{
 		current_weapon->theWeapon->fn_processState(current_weapon, TIME * enemyTime);
+	}
+
+	// process selector
+	switch(selectorState){
+	case 3:
+	case 4:
+		// moving down
+		selectorPosition -= TIME * SELECTOR_TIME_MOD;
+		if( selectorPosition <= 0.0f ){
+			if( selectorState == 3 ){
+				selectorState = 0;
+				//game_message("changed to state 0");
+			}
+			else {
+				//game_message("changed to state 5");
+				selectorState = 5;
+			}
+			selectorPosition = 0.0f;
+		}
+		break;
+	case 1:
+	case 5:
+		// moving up
+		selectorPosition += TIME * SELECTOR_TIME_MOD;
+
+		if( selectorPosition >= 1.0f ){
+			selectorState = 2;
+			selectorPosition = 1.0f;
+			//game_message("changed to state 2");
+		}
+		break;
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5661,6 +3520,8 @@ void weapon_destroy()
 	weapon_deapply();
 
 	weapon_grenade_kill();
+	weapon_molotov_kill();
+	weapon_mini_rocket_kill();
 
 	if( select_background )
 	{
@@ -5814,6 +3675,7 @@ geBoolean weapon_drawBar(int x, int y)
 	br.Top = (int32) (f* 30);
 	br.Bottom = 31;
 
+	//@@@todo@@@ fix faster rendering
 	if( !geEngine_DrawBitmap(Engine, bar, &br, x, y+br.Top ) )
 	{
 		printLog("Failed to draw bar.\n");
@@ -5923,25 +3785,36 @@ geBoolean weapon_render()
 	}
 
 //	char str[600];
-	if( open_sec )
+	if( selectorState )
 	{
-		//do da render
-		if(! render_classnumber(classNumber[0], 0,  1 , selClass == 0) )return GE_FALSE;
-		if(! render_classnumber(classNumber[1], 17, 1 , selClass == 1) )return GE_FALSE;
-		if(! render_classnumber(classNumber[2], 33, 1 , selClass == 2) )return GE_FALSE;
-		if(! render_classnumber(classNumber[3], 49, 1 , selClass == 3) )return GE_FALSE;
-		if(! render_classnumber(classNumber[4], 65, 1 , selClass == 4) )return GE_FALSE;
-		if(! render_classnumber(classNumber[5], 81, 1 , selClass == 5) )return GE_FALSE;
-
+		int y;
+		if( selectorState == 2 ) {
+			y = Height - 200; // 304
+		}
+		else {
+			y = Height-68;
+			y -= (int) (132*selectorPosition);
+		}
 
 		//render select_background
-		if( !renderBitmap(select_background, Width-85, Height-304) )
+		if( !renderBitmap(select_background, Width-85, y) )
 			return GE_FALSE;
-		//render weapon category with selected weapon / cross
-		if(! render_weapon_bmp(&(weapons[selClass][0]), Width-71, Height-289, 0 == selWeapon) )return GE_FALSE;
-		if(! render_weapon_bmp(&(weapons[selClass][1]), Width-71, Height-231, 1 == selWeapon) )return GE_FALSE;
-		if(! render_weapon_bmp(&(weapons[selClass][2]), Width-71, Height-173, 2 == selWeapon) )return GE_FALSE;
-		if(! render_weapon_bmp(&(weapons[selClass][3]), Width-71, Height-115, 3 == selWeapon) )return GE_FALSE;
+
+		if( selectorState == 2 ){
+			//do da render
+			if(! render_classnumber(classNumber[0], 0,  1 , selClass == 0) )return GE_FALSE;
+			if(! render_classnumber(classNumber[1], 17, 1 , selClass == 1) )return GE_FALSE;
+			if(! render_classnumber(classNumber[2], 33, 1 , selClass == 2) )return GE_FALSE;
+			if(! render_classnumber(classNumber[3], 49, 1 , selClass == 3) )return GE_FALSE;
+			if(! render_classnumber(classNumber[4], 65, 1 , selClass == 4) )return GE_FALSE;
+			if(! render_classnumber(classNumber[5], 81, 1 , selClass == 5) )return GE_FALSE;
+
+			//render weapon category with selected weapon / cross
+			//if(! render_weapon_bmp(&(weapons[selClass][0]), Width-71, Height-289, 0 == selWeapon) )return GE_FALSE;
+			//if(! render_weapon_bmp(&(weapons[selClass][1]), Width-71, Height-231, 1 == selWeapon) )return GE_FALSE;
+			if(! render_weapon_bmp(&(weapons[selClass][0]), Width-71, Height-173, 0 == selWeapon) )return GE_FALSE;
+			if(! render_weapon_bmp(&(weapons[selClass][1]), Width-71, Height-115, 1 == selWeapon) )return GE_FALSE;
+		}
 	}
 
 //	sprintf(str, "Ammo %i", current_weapon->ammonution);
@@ -5968,7 +3841,8 @@ geBoolean weapon_render()
 		br.Right = (int32) (f* 250);
 		br.Top = 0;
 		br.Bottom = 20;
-		
+
+		// @@@todo@@@ fix faster rendering
 		if( !geEngine_DrawBitmap(Engine, line, &br, x, y ) )
 		{
 			printLog("Failed to draw bar.\n");
@@ -5993,7 +3867,6 @@ geBoolean weapon_render()
 void weapon_next()
 {
 	enable_selector();
-
 	selWeapon++;
 
 	if( selWeapon >= NUMBER_OF_WEAPONS )
@@ -6001,6 +3874,7 @@ void weapon_next()
 		//change class
 		selWeapon =0;
 		selClass++;
+		selector_classChange();
 	}
 
 	if( selClass >= NUMBER_OF_C )
@@ -6032,6 +3906,8 @@ void weapon_previous()
 		{
 			selClass--;
 		}
+
+		selector_classChange();
 	}
 	else
 	{
@@ -6162,28 +4038,16 @@ geBoolean weapon_water()
 void weapon_strip()
 {
 	weapon_loose_knife();
-	weapon_loose_hammer();
-	weapon_loose_axe();
 	weapon_loose_glock();
 	weapon_loose_deagle();
-	weapon_loose_tazer();
-	weapon_loose_tranqualizer();
 	weapon_loose_shotgun();
-	weapon_loose_mag7();
 	weapon_loose_sniper();
-	weapon_loose_barret();
 	weapon_loose_smg();
 	weapon_loose_uzi();
-	weapon_loose_ak47();
-	weapon_loose_commando();
 	weapon_loose_lft();
-	weapon_loose_flamethrower();
 	weapon_loose_molotov();
-	weapon_loose_signalpistol();
-	weapon_loose_launcher();
 	weapon_loose_grenade();
-	weapon_loose_c4();
-	weapon_loose_mine();
+	weapon_loose_minirocket();
 
 	current_weapon = 0;
 	selClass = WEAPON_C_COMBATS;
@@ -6194,28 +4058,16 @@ void weapon_strip()
 void weapon_give_all()
 {
 	weapon_give_knife();
-	weapon_give_hammer();
-	weapon_give_axe();
-	weapon_give_glock(0);
-	weapon_give_deagle(0);
-	weapon_give_tazer(0);
-	weapon_give_tranqualizer(0);
-	weapon_give_shotgun(0);
-	weapon_give_mag7(0);
-	weapon_give_sniper(0);
-	weapon_give_barret(0);
-	weapon_give_smg(0);
-	weapon_give_uzi(0);
-	weapon_give_ak47(0);
-	weapon_give_commando(0);
-	weapon_give_lft(0);
-	weapon_give_flamethrower(0);
-	weapon_give_molotov(0);
-	weapon_give_signalpistol(0);
-	weapon_give_launcher(0);
-	weapon_give_grenade(0);
-	weapon_give_c4(0);
-	weapon_give_mine(0);
+	weapon_give_glock(2);
+	weapon_give_deagle(2);
+	weapon_give_shotgun(2);
+	weapon_give_sniper(2);
+	weapon_give_smg(2);
+	weapon_give_uzi(2);
+	weapon_give_lft(2);
+	weapon_give_molotov(2);
+	weapon_give_grenade(2);
+	weapon_give_minirocket(2);
 }
 
 /*********************************************************************************************************/
@@ -6234,34 +4086,69 @@ void weapon_got_ammo(char* name){
 	game_message(message);
 }
 
+
+/**Gives the player a weapon.
+ * Gives a weapon with some ammo, only ammo or a full load.
+ * Automatly adds a blue flash.
+ * @see add_blueFlash
+ * @param wt Describes the weapon category
+ * @param index is the index in the weapon category
+ * @param type is the type of what to give. 0 is the weapon and ammo(5), 1 is some ammo(1), and 2 is full load, 3 is a ammo pack(9).
+ */
+void weapon_give(int wt, int index, int type)
+{
+	weapon* cw = &(weapons[wt][index] );
+
+	switch( type ){
+	case 0:
+		weapon_got(cw->theWeapon->name);
+		cw->magasines += 5;
+		if( cw->number_of_weapons == 0 ){
+			cw->magasines -= 1;
+			cw->ammonution = cw->theWeapon->max_ammo;
+		}
+		break;
+	case 1:
+		weapon_got_ammo(cw->theWeapon->name);
+		cw->magasines += 1;
+		break;
+	case 2:
+		//weapon_got(cw->theWeapon->name);
+		//game_message("cheater");
+		cw->magasines = cw->theWeapon->mag;
+		cw->ammonution = cw->theWeapon->max_ammo;
+		break;
+	case 3:
+		weapon_got_ammo(cw->theWeapon->name);
+		cw->magasines += 9;
+		break;
+	default:
+		console_message(cw->theWeapon->name);
+		// bad parameter
+		return;
+	}
+
+	if( type != 1 ) cw->number_of_weapons = 1;
+	// limmit the mag to the maximum
+	if( cw->theWeapon->mag > cw->magasines ) cw->magasines = cw->theWeapon->mag;
+	add_blueFlash( PICKUP_FLASH );
+}
+
+void loose_this_weapon(int c, int i){
+	weapon* cw = & (weapons[c][i] );
+	cw->ammonution = 0;
+	cw->magasines = 0;
+	cw->number_of_weapons = 0;
+	if( cw == current_weapon ){
+		// we can't loose our ability to fight hand to hand...
+		current_weapon = & (weapons[WEAPON_C_COMBATS][0] );
+		apply_weapon();
+	}
+}
+
 void weapon_give_knife()
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][1] );
-	weapon_got(current_weapon->theWeapon->name);
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_hammer()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][2] );
-	weapon_got(current_weapon->theWeapon->name);
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_axe()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][3] );
-	weapon_got(current_weapon->theWeapon->name);
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_COMBATS, 1, 0);
 }
 
 	/////////////////////////////////////////////////////
@@ -6269,94 +4156,12 @@ void weapon_give_axe()
 
 void weapon_give_glock(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][0] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_PISTOLS, 0, mag);
 }
 	
 void weapon_give_deagle(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][1] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_tazer(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][2] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_tranqualizer(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][3] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_PISTOLS, 1, mag);
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
@@ -6365,94 +4170,13 @@ void weapon_give_tranqualizer(int mag)
 
 void weapon_give_shotgun(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][0] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	// does this seem valid, only 5 shells in a weapon, when there is 5 magazines in a pistol?
+	weapon_give(WEAPON_C_RIFLES, 0, mag);
 }
 
-void weapon_give_mag7(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][1] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-	
 void weapon_give_sniper(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][2] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_barret(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][3] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_RIFLES, 1, mag);
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
@@ -6461,94 +4185,12 @@ void weapon_give_barret(int mag)
 
 void weapon_give_smg(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][0] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_AUTOMATICS, 0, mag);
 }
 
 void weapon_give_uzi(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][1] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_ak47(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][2] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_commando(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][3] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_AUTOMATICS, 1, mag);
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
@@ -6557,196 +4199,28 @@ void weapon_give_commando(int mag)
 
 void weapon_give_lft(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][0] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-void weapon_give_flamethrower(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][1] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_FLAMES, 0, mag);
 }
 
 void weapon_give_molotov(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][2] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_FLAMES, 1, mag);
 }
 
-void weapon_give_signalpistol(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][3] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
 	
 	//--------------------------------------------------------------------------------------------------------------------
 	//Explosives
 	//--------------------------------------------------------------------------------------------------------------------
 
-void weapon_give_launcher(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][0] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
 void weapon_give_grenade(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][1] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_EXPLOSIVES, 0, mag);
 }
 
-void weapon_give_c4(int mag)
+void weapon_give_minirocket(int mag)
 {
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][2] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
+	weapon_give(WEAPON_C_EXPLOSIVES, 1, mag);
 }
-
-void weapon_give_mine(int mag)
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][3] );
-	if( mag ) {
-		if( (current_weapon->magasines + mag) >= 99 ) {
-			current_weapon->magasines = 99;
-		}
-		else {
-			current_weapon->magasines += mag;
-		}
-		weapon_got_ammo(current_weapon->theWeapon->name);
-	}
-	else {
-		current_weapon->ammonution = current_weapon->theWeapon->max_ammo;
-		current_weapon->magasines = current_weapon->theWeapon->mag;
-		weapon_got(current_weapon->theWeapon->name);
-	}
-	current_weapon->number_of_weapons = 1;
-	current_weapon = cw;
-	add_blueFlash( PICKUP_FLASH );
-}
-
-
-
-
-
 
 
 
@@ -6756,262 +4230,67 @@ void weapon_give_mine(int mag)
 /*********************************************************************************************************/
 
 
-
-
-
-
-
-
-
-
-void weapon_loose_knife()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][1] );
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_hammer()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][2] );
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_axe()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_COMBATS][3] );
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_knife() {
+	loose_this_weapon(WEAPON_C_COMBATS, 1);
 }
 
 	/////////////////////////////////////////////////////
 	//Pistols
 
-void weapon_loose_glock()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][0] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_glock() {
+	loose_this_weapon(WEAPON_C_PISTOLS, 0 );
 }
 	
-void weapon_loose_deagle()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][1] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_tazer()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][2] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_tranqualizer()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_PISTOLS][3] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_deagle() {
+	loose_this_weapon(WEAPON_C_PISTOLS, 1 );
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
 	//RIFLES
 	//--------------------------------------------------------------------------------------------------------------------
 
-void weapon_loose_shotgun()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][0] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_shotgun() {
+	loose_this_weapon(WEAPON_C_RIFLES, 0 );
 }
-
-void weapon_loose_mag7()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][1] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-	
-void weapon_loose_sniper()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][2] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_barret()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_RIFLES][3] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_sniper() {
+	loose_this_weapon(WEAPON_C_RIFLES, 1 );
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
 	//Automatics
 	//--------------------------------------------------------------------------------------------------------------------
 
-void weapon_loose_smg()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][0] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_smg() {
+	loose_this_weapon(WEAPON_C_AUTOMATICS, 0 );
 }
 
-void weapon_loose_uzi()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][1] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_uzi() {
+	loose_this_weapon(WEAPON_C_AUTOMATICS, 1 );
 }
 
-void weapon_loose_ak47()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][2] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_commando()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_AUTOMATICS][3] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
 	
 	//--------------------------------------------------------------------------------------------------------------------
 	//FLAMES
 	//--------------------------------------------------------------------------------------------------------------------
 
-void weapon_loose_lft()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][0] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_lft() {
+	loose_this_weapon(WEAPON_C_FLAMES, 0 );
 }
 
-void weapon_loose_flamethrower()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][1] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_molotov()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][2] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_signalpistol()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_FLAMES][3] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_molotov() {
+	loose_this_weapon(WEAPON_C_FLAMES, 1 );
 }
 	
 	//--------------------------------------------------------------------------------------------------------------------
 	//Explosives
 	//--------------------------------------------------------------------------------------------------------------------
 
-void weapon_loose_launcher()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][0] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_grenade() {
+	loose_this_weapon(WEAPON_C_EXPLOSIVES, 0 );
 }
-
-void weapon_loose_grenade()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][1] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
+void weapon_loose_minirocket() {
+	loose_this_weapon(WEAPON_C_EXPLOSIVES, 1 );
 }
-
-void weapon_loose_c4()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][2] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-void weapon_loose_mine()
-{
-	weapon* cw = current_weapon;
-	current_weapon = & (weapons[WEAPON_C_EXPLOSIVES][3] );
-	current_weapon->ammonution = 0;
-	current_weapon->magasines = 0;
-	current_weapon->number_of_weapons = 0;
-	current_weapon = cw;
-}
-
-
-
-
-
-
 
 
 
@@ -7030,7 +4309,7 @@ void weapon_grenade_bang(geVec3d position, float radius){
 	geXForm3d_GetIn(&XForm, &wIn);
 
 	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
-	soundsys_play3dsound(&explosion_sound, &position, radius, GE_TRUE);
+	soundsys_play3dsound(&explosion_sound, &position, 5.0f, GE_TRUE, GE_FALSE);
 	fx_grenadeExplosion(position);
 
 	explosion_at(&position, radius, 150);
@@ -7087,7 +4366,148 @@ void weapon_grenade_bang(geVec3d position, float radius){
 #undef MIN
 }
 
+void weapon_molotov_bang(geVec3d position, float radius){
+#define MIN 0.1f
+#define		COLLISION		geWorld_Collision(World,&(bb.Min),&(bb.Max),&position,&to,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff, 0 ,NULL, &lCol)
+#define		ADD_MARK		{ bullet_hitObstacle(&lCol, DECALTYPE_SCORCHBIG ); }
+#define		SETUP_TO		geVec3d_AddScaled(&position, &direction, 15.0f, &to);
+	//geVec3d direction;
+	//geVec3d to;
+	//geExtBox bb;
+	//GE_Collision lCol;
+	//geBoolean result;
+	//geVec3d wIn;
+	//geXForm3d_GetIn(&XForm, &wIn);
 
+	//geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+	soundsys_play3dsound(&explosion_sound, &position, 5.0f, GE_TRUE, GE_FALSE);
+	fx_fireExplosion(position);
+	fire_explosion_at(&position, radius, 150);
+	
+	/*
+	geVec3d_Clear(&direction);
+	direction.Y = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.Y = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	geVec3d_Clear(&direction);
+
+	direction.X = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.X = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	geVec3d_Clear(&direction);
+
+	direction.Z = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.Z = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+	*/
+#undef SETUP_TO
+#undef COLLISION
+#undef ADD_MARK
+#undef MIN
+}
+
+void weapon_mini_rocket_bang(geVec3d position, float radius){
+#define MIN 0.1f
+#define		COLLISION		geWorld_Collision(World,&(bb.Min),&(bb.Max),&position,&to,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff, 0 ,NULL, &lCol)
+#define		ADD_MARK		{ bullet_hitObstacle(&lCol, DECALTYPE_SCORCHBIG ); }
+#define		SETUP_TO		geVec3d_AddScaled(&position, &direction, 15.0f, &to);
+	geVec3d direction;
+	geVec3d to;
+	geExtBox bb;
+	GE_Collision lCol;
+	geBoolean result;
+	geVec3d wIn;
+	geXForm3d_GetIn(&XForm, &wIn);
+
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+	soundsys_play3dsound(&explosion_sound, &position, 5.0f, GE_TRUE, GE_FALSE);
+	fx_grenadeExplosion(position);
+
+	explosion_at(&position, radius, 100);
+
+	geVec3d_Clear(&direction);
+	direction.Y = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.Y = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	geVec3d_Clear(&direction);
+
+	direction.X = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.X = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	geVec3d_Clear(&direction);
+
+	direction.Z = 10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+
+	direction.Z = -10.0f;
+	SETUP_TO;
+	result = COLLISION;
+	if( result ) {
+		ADD_MARK;
+	}
+#undef SETUP_TO
+#undef COLLISION
+#undef ADD_MARK
+#undef MIN
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // end of file

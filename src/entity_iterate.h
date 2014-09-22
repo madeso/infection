@@ -18,10 +18,10 @@ handle_entities(SaveFile* file, geWorld* world);
 geBoolean new_entities( geWorld* world); // initializes the data of the entities
 void iterate_entities( geVec3d* pos, geWorld* world); // iterates the enities
 void delete_entities( geWorld* world);// deletes the entities
-geVec3d* findPositionByName(geWorld* world, char* name);
+geVec3d* findPositionByName(geWorld* world, const char* name);
 
-void entity_enableByName(geWorld* world, char* name);
-void entity_disableByName(geWorld* world, char* name);
+void entity_enableByName(geWorld* world, const char* name);
+void entity_disableByName(geWorld* world, const char* name);
 
 #define ENTITY_NO_USABLE_ENTETIES 2
 #define ENTITY_ERROR 0
@@ -31,5 +31,6 @@ void entity_disableByName(geWorld* world, char* name);
 
 int use_entity(geWorld_Model* model);
 geBoolean can_use_entity(geWorld_Model* model);
+geBoolean can_use_actor(geActor* act); // defined in enemy_civilian.c
 
 #endif

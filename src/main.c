@@ -45,6 +45,10 @@
 #include "sound_modder.h"
 #include "libraries.h"
 
+#include "fxbitmaps.h"
+
+#include "enemy_civilian.h"
+
 #define PLAYER_NORMAL_AIR 20.0f
 #define CONSOLE_LINE_SIZE 80
 
@@ -69,10 +73,10 @@ int pre_sec;
 int new_sec;
 float lastUpdateTime;
 //float realFps;
-
+char rm_inMeny = 1; // updated in the main loop in WinMain, it contains the renderMeny() meny result on a per frame basis
 
 char needInput(){
-	return inConsole;
+	return inConsole || rm_inMeny;
 }
 
 void print_fps(){
@@ -80,16 +84,22 @@ void print_fps(){
 	fps = (delta_T == 0) ? 1 : 1/delta_T;
 
 
-		if( cheats.printFps ){
+	if( cheats.printFps ){
+		GE_RGBA color;
+		color.r = color.g = color.b = 255.0f;
+		color.a = 255.0f;
+
 		printExtended("Printing fps.\n");
 		//Print fov
-		sprintf(str, "FPS: %.1f", realFps);
+		XFontMgr_PrintAt(fntMgr, Width/2, 0, kFontSmall, color, Camera, "FPS: %.1f", realFps );
+
+		/*sprintf(str, "FPS: %.1f", realFps);
 		if( geEngine_Printf(Engine, Width/2, 0, str) == GE_FALSE )
 		{
 			run = 0;
 			printLog("***geEngine_Printf() failed when printin fps.\n\n");
 			error("geEngine_Printf() failed when printing fps");
-		}
+		}*/
 	}
 }
 
@@ -99,6 +109,7 @@ void render_basic()
 {
 	//Render world
 	printExtended("Rendering world.\n");
+
 	if( geEngine_RenderWorld(Engine, World, Camera, 0.0f) == GE_FALSE )
 	{
 		run = 0;
@@ -110,12 +121,13 @@ void render_basic()
 		DrawBoundBox(World, &(XForm.Translation), &(ExtBox.Min), &(ExtBox.Max) );
 	}
 
+	/*
 	if( cheats.debug ){
 		static float maxTIME = 0.0f;
 		if( TIME > maxTIME ) maxTIME = TIME;
 		geEngine_Printf(Engine, 10 , 30 , "%f, %f, %f", Angle.X, Angle.Y, Angle.Z);
 		geEngine_Printf(Engine, 10 , 50 , "%f, %f", maxTIME, TIME);
-	}
+	}*/
 	
 	if (EM)
 	{
@@ -164,6 +176,8 @@ void render_basic()
 		printLog("***render_subTitle() failed when rendering subtitle.\n\n");
 		error("render_subTitle() failed");
 	}
+
+	civilian_renderName();
 	//-----------------------------------------------------------------------------------//
 }
 
@@ -195,18 +209,21 @@ void render_game()
 	// if we need print the weapon name
 	if( weapon_ok() && cheats.doPrint)
 	{
-		geEngine_Printf(Engine, 80 , 50 , weapon_getName());
+		XFontMgr_PrintAt(fntMgr, 80, 50, kFontSmall, colorDebug, Camera, "%s", weapon_getName() );
+		//geEngine_Printf(Engine, 80 , 50 , weapon_getName());
 	}
 	
 	
 	if( cheats.debug ) {
-		char str[100];
-		sprintf(str, "Pos: %f %f %f ", Pos.X, Pos.Y, Pos.Z);
-		geEngine_Printf(Engine, 10 , 10 , str);
+		//char str[100];
+		//sprintf(str, "Pos: %f %f %f ", Pos.X, Pos.Y, Pos.Z);
+		//geEngine_Printf(Engine, 10 , 10 , str);
+		XFontMgr_PrintAt(fntMgr, 10, 10, kFontSmall, colorDebug, Camera, "Pos: %f %f %f ", Pos.X, Pos.Y, Pos.Z);
 	}
 	
 	
-	if( !player_is_alive ) geEngine_Printf(Engine, 210 , 210 , "You died!");
+	if( !player_is_alive ) //geEngine_Printf(Engine, 210 , 210 , "You died!");
+		XFontMgr_PrintAt(fntMgr, 210, 210, kFontSmall, colorDebug, Camera, "%s", "You died!");
 	/*if( keys[VK_SHIFT] ) geEngine_Printf(Engine, 80 , 90 , "Shift");
 	else geEngine_Printf(Engine, 80 , 90 , "No shift");*/
 	//-----------------------------------------------------------------------------------//
@@ -227,12 +244,10 @@ void render_manager()
 	
 	printExtended("render basic.\n");
 	
-	if( !renderMeny() )
+	if( !rm_inMeny ){
 		render_basic();
-	
-	print_fps();
-
-	if( renderMeny() ) {
+	}
+	else {
 		meny_render();
 	}
 
@@ -241,11 +256,13 @@ void render_manager()
 		printExtended("render console.\n");
 		render_console();
 	}
-	else if( !renderMeny() )
+	else if( !rm_inMeny )
 	{
 		printExtended("render game.\n");
 		render_game();
 	}
+
+	print_fps();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -334,7 +351,7 @@ void main_init(int nShowCmd){
 	printLog("Window class registered.\n");
 	
 	//Create the window
-	hWnd = CreateWindowEx(0, wc.lpszClassName, INFECTION_NAME_AND_VERSION, 0, CW_USEDEFAULT, CW_USEDEFAULT, Width, Height, NULL, NULL, hGlobalInstance, NULL);
+	hWnd = CreateWindowEx(0, wc.lpszClassName, INFECTION_NAME_AND_VERSION, 0, 0, 0, Width, Height, NULL, NULL, hGlobalInstance, NULL);
 	
 	if(!hWnd)
 	{
@@ -468,7 +485,11 @@ void each_second_update(){
 	//----------------
 	//Update the time
 	//----------------
-	
+	static float timePassedSinceLastCallModSec = 0.0f;
+	static float timePassedSinceLastCallModBlood = 0.0f;
+	timePassedSinceLastCallModSec += TIME * heroTime;
+	timePassedSinceLastCallModBlood += TIME * heroTime;
+		
 	// this is probably bad, but it'll do for now
 	
 	time(&ltime);
@@ -476,20 +497,37 @@ void each_second_update(){
 	
 	//update sec
 	new_sec = today->tm_sec;
+
+	if( timePassedSinceLastCallModBlood > 0.2f ) {
+		timePassedSinceLastCallModBlood = 0.0f;
+		if( !inConsole ) {
+			if( hero_hit_points < 30 && hero_hit_points > 0) {
+				BloodExplosion(XForm.Translation);
+			}
+		}
+	}
 	
 	//it has passed a second
-	if( pre_sec != new_sec )
+	if( timePassedSinceLastCallModSec > 1.0f )
 	{
+		timePassedSinceLastCallModSec = 0.0f;
 		if( !inConsole )
 		{
 			weapon_evry_sec();
 			
 			tick_messages();
 			
-			if( air <= 0.0f && player_is_alive)
-			{
+			if( air <= 0.0f && player_is_alive)	{
 				armor_piercing_damage( rand()%6 +1 );
 				game_message("Seek air");
+			}
+
+			// heal or loose health
+			if( hero_hit_points < 30 && hero_hit_points > 0) {
+				armor_piercing_damage(1);
+			}
+			else if( hero_hit_points > 70 && hero_hit_points < 100 ) {
+				hero_hit_points++;
 			}
 		}
 		
@@ -499,22 +537,22 @@ void each_second_update(){
 }
 void beginFrame(){
 	//Begin frame
-	if( geEngine_BeginFrame(Engine, Camera, (!renderMeny())?options.clearScreen:
+	if( geEngine_BeginFrame(Engine, Camera, (!rm_inMeny)?options.clearScreen:
 	GE_TRUE
 	#pragma message("Meny clearing screen by default")
 		) == GE_FALSE )	{
-		run = 0;
-		printLog("***geEngine_BeginFrame() failed.\n\n");
-		error( "geEngine_BeginFrame() failed." );
+		//run = 0;
+		//printLog("***geEngine_BeginFrame() failed.\n\n");
+		//error( "geEngine_BeginFrame() failed." );
 	}
 }
 
 void endFrame(){
 	//End frame
 	if( geEngine_EndFrame(Engine) == GE_FALSE )	{
-		run = 0;
-		printLog("***geEngine_EndFrame() failed.\n\n");
-		error("geEngine_EndFrame() failed");
+		//run = 0;
+		//printLog("***geEngine_EndFrame() failed.\n\n");
+		//error("geEngine_EndFrame() failed");
 	}
 }
 
@@ -580,6 +618,21 @@ void handleGameUpdate(){
 	timeout_iterate(TIME * heroTime );
 	iterateFlash();
 	sm_iterate(TIME * heroTime );
+}
+
+void sendKeysToMeny(){
+	char c=' ';
+	// there should only be valid characters in the inputBuffer,
+	// so we should process all of them, and don't look at them
+	while( EditBox_xpop(&inputBuffer, &c) )	{
+		// backspace ascii
+		//if( c==0x08 ) {
+			meny_onChar(c);/*
+		}
+		else {
+			meny_onChar(c);
+		}*/
+	}
 }
 
 void handleConsoleUpdate(){
@@ -680,10 +733,10 @@ void updateState() {
 				break;
 			case STATE_WATER:
 				if( air > 0.2f ) {
-					soundsys_play_sound(&outofwater, GE_FALSE);
+					soundsys_play_sound(&outofwater, GE_FALSE, TYPE_PLAY, 0.0f, 1.0f);
 				}
 				else {
-					soundsys_play_sound(&breathing_again, GE_FALSE);
+					soundsys_play_sound(&breathing_again, GE_FALSE, TYPE_PLAY, 0.0f, 1.0f);
 				}
 				leave_water();
 				break;
@@ -695,7 +748,7 @@ void updateState() {
 			}
 			break;
 			case STATE_WATER:
-				soundsys_play_sound(&splash[ rand()%6 ], GE_FALSE);
+				soundsys_play_sound(&splash[ rand()%6 ], GE_FALSE, TYPE_PLAY, 0.0f, 1.0f);
 				enter_water();
 				break;
 			case STATE_LADDER:
@@ -747,6 +800,13 @@ void updateCursor(){
 	{
 		geBoolean result = 0;
 
+		if( Col.Actor ) {
+			result = can_use_actor(Col.Actor);
+			if( result ) {
+				currentCrosshair = options.crosshairOver;
+			}
+		}
+
 		if(! Col.Model ){
 			return;
 		}
@@ -769,18 +829,21 @@ void updateCursor(){
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 {
+
 	geBoolean backKeyDown = GE_FALSE;
 	hGlobalInstance = hInstance;
 	main_init(nShowCmd);
 	
 	while(run){
+		checkToLoadLevel();
 		// limmit the fps
 		while( !need_to_render() );
 
 		update_timing();
 		handleCursorVisibility();
 
-		if( !renderMeny() ){
+		rm_inMeny = renderMeny();
+		if( !rm_inMeny ){
 			update_player_state();
 			set_speed();
 			each_second_update();
@@ -788,6 +851,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		} else {
 			meny_preRedner();
 		}
+		soundsys_update3dAll(&(XForm.Translation), GE_TRUE);
 		
 		//---------
 		//Rendering
@@ -801,7 +865,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		endFrame();
 		
 		//Update the position
-		if( !renderMeny() )
+		if( !rm_inMeny )
 			Pos = XForm.Translation;
 		
 		//----------------
@@ -822,11 +886,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		// end TEMPROARY
 		
 		if( !inConsole ) {
-			if( !renderMeny() ){
+			if( !rm_inMeny ){
 				handleGameUpdate();
 				handlePlayerAir();
 				updateState();
 			} else {
+				sendKeysToMeny();
 				meny_update();
 			}
 		}
@@ -837,7 +902,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		handleScreenshotButton();
 		handleConsoleButton();
 		
-		if( !renderMeny() )
+		if( !rm_inMeny )
 			changeXForm();
 		
 		printExtended("Mainloop end.\n");
@@ -994,3 +1059,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+
+void timing_reset(){
+	old_T = new_T = (geFloat) timeGetTime()/1000;
+}

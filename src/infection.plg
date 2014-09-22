@@ -6,24 +6,83 @@
 --------------------Configuration: infection - Win32 Release--------------------
 </h3>
 <h3>Command Lines</h3>
-Creating temporary file "C:\WINDOWS\TEMP\RSP7286.TMP" with contents
+Creating command line "rc.exe /l 0x41d /fo"Release/resources.res" /d "NDEBUG" "D:\infection\src\resources.rc"" 
+Creating temporary file "C:\DOCUME~1\Gustav\LOKALA~1\Temp\RSP36.tmp" with contents
 [
 /nologo /MT /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /Fp"Release/infection.pch" /YX /Fo"Release/" /Fd"Release/" /FD /c 
-"C:\infection\src\enemy_zombie.c"
+"D:\infection\src\entity_iterate.c"
+"D:\infection\src\extra_genesis.c"
+"D:\infection\src\globalGenesis.c"
+"D:\infection\src\globals.c"
+"D:\infection\src\inf_actor.c"
+"D:\infection\src\inf_lua.c"
+"D:\infection\src\infection.c"
+"D:\infection\src\init.c"
+"D:\infection\src\inventory.c"
+"D:\infection\src\level.c"
+"D:\infection\src\log.c"
+"D:\infection\src\main.c"
+"D:\infection\src\muliint.c"
+"D:\infection\src\options.c"
+"D:\infection\src\pickup.c"
+"D:\infection\src\proposed.c"
+"D:\infection\src\subtitles.c"
+"D:\infection\src\time_out.c"
+"D:\infection\src\Decal.c"
+"D:\infection\src\e_rain.c"
+"D:\infection\src\e_spout.c"
+"D:\infection\src\e_sprite.c"
+"D:\infection\src\EffManager.c"
+"D:\infection\src\EffParticle.c"
+"D:\infection\src\SPool.c"
+"D:\infection\src\TPool.c"
+"D:\infection\src\crosshair.c"
+"D:\infection\src\hud.c"
+"D:\infection\src\console.c"
+"D:\infection\src\ConsoleBuffer.c"
+"D:\infection\src\edit.c"
+"D:\infection\src\sound_modder.c"
+"D:\infection\src\sound_system.c"
+"D:\infection\src\inf_message_system.c"
+"D:\infection\src\conversation.c"
+"D:\infection\src\damage.c"
+"D:\infection\src\jacktalks.c"
+"D:\infection\src\player.c"
+"D:\infection\src\recoil.c"
+"D:\infection\src\time_damage.c"
+"D:\infection\src\timefx.c"
+"D:\infection\src\enemies.c"
+"D:\infection\src\enemy_civilian.c"
+"D:\infection\src\enemy_rat.c"
+"D:\infection\src\enemy_zombie.c"
+"D:\infection\src\fxbitmaps.c"
+"D:\infection\src\hash_table.c"
+"D:\infection\src\linked_list.c"
+"D:\infection\src\save_file\md5.c"
+"D:\infection\src\save_file\OneTimePads.c"
+"D:\infection\src\save_file\save_file.c"
+"D:\infection\src\explosions.c"
+"D:\infection\src\grenade_manager.c"
+"D:\infection\src\mini_rocket_manager.c"
+"D:\infection\src\molotov_manager.c"
+"D:\infection\src\NearestActorContainer.c"
+"D:\infection\src\weapon.c"
+"D:\infection\src\inf_gui.c"
+"D:\infection\src\inf_meny.c"
+"D:\infection\src\xfont.c"
+"D:\infection\src\movie.c"
+"D:\infection\src\drawbbox.c"
 ]
-Creating command line "cl.exe @C:\WINDOWS\TEMP\RSP7286.TMP" 
-Creating temporary file "C:\WINDOWS\TEMP\RSP7287.TMP" with contents
+Creating command line "cl.exe @C:\DOCUME~1\Gustav\LOKALA~1\Temp\RSP36.tmp" 
+Creating temporary file "C:\DOCUME~1\Gustav\LOKALA~1\Temp\RSP37.tmp" with contents
 [
-winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /incremental:no /pdb:"Release/infection.pdb" /machine:I386 /nodefaultlib:"libcd.lib" /out:"Release/infection.exe" 
-.\Release\edit.obj
+winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /incremental:no /pdb:"Release/infection.pdb" /debug /machine:I386 /nodefaultlib:"libcd.lib" /nodefaultlib:"libc.lib" /out:"Release/infection.exe" 
 .\Release\entity_iterate.obj
 .\Release\extra_genesis.obj
 .\Release\globalGenesis.obj
 .\Release\globals.obj
 .\Release\inf_actor.obj
-.\Release\inf_gui.obj
 .\Release\inf_lua.obj
-.\Release\inf_meny.obj
 .\Release\infection.obj
 .\Release\init.obj
 .\Release\inventory.obj
@@ -32,6 +91,7 @@ winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.l
 .\Release\main.obj
 .\Release\muliint.obj
 .\Release\options.obj
+.\Release\pickup.obj
 .\Release\proposed.obj
 .\Release\subtitles.obj
 .\Release\time_out.obj
@@ -47,6 +107,7 @@ winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.l
 .\Release\hud.obj
 .\Release\console.obj
 .\Release\ConsoleBuffer.obj
+.\Release\edit.obj
 .\Release\sound_modder.obj
 .\Release\sound_system.obj
 .\Release\inf_message_system.obj
@@ -54,13 +115,14 @@ winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.l
 .\Release\damage.obj
 .\Release\jacktalks.obj
 .\Release\player.obj
+.\Release\recoil.obj
 .\Release\time_damage.obj
 .\Release\timefx.obj
 .\Release\enemies.obj
+.\Release\enemy_civilian.obj
 .\Release\enemy_rat.obj
 .\Release\enemy_zombie.obj
 .\Release\fxbitmaps.obj
-.\Release\avl.obj
 .\Release\hash_table.obj
 .\Release\linked_list.obj
 .\Release\md5.obj
@@ -68,27 +130,104 @@ winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.l
 .\Release\save_file.obj
 .\Release\explosions.obj
 .\Release\grenade_manager.obj
+.\Release\mini_rocket_manager.obj
+.\Release\molotov_manager.obj
 .\Release\NearestActorContainer.obj
 .\Release\weapon.obj
+.\Release\inf_gui.obj
+.\Release\inf_meny.obj
+.\Release\xfont.obj
+.\Release\movie.obj
 .\Release\drawbbox.obj
 .\Release\resources.res
 ]
-Creating command line "link.exe @C:\WINDOWS\TEMP\RSP7287.TMP"
+Creating command line "link.exe @C:\DOCUME~1\Gustav\LOKALA~1\Temp\RSP37.tmp"
 <h3>Output Window</h3>
+Compiling resources...
 Compiling...
+entity_iterate.c
+extra_genesis.c
+globalGenesis.c
+globals.c
+inf_actor.c
+inf_lua.c
+infection.c
+init.c
+Disabling cheats.god and cheats.printFps
+inventory.c
+level.c
+log.c
+main.c
+Linking with lualib.lib
+Linking with fmodvc.lib
+Linking with GenesisR.lib
+Meny clearing screen by default
+muliint.c
+options.c
+pickup.c
+proposed.c
+subtitles.c
+time_out.c
+Decal.c
+e_rain.c
+e_spout.c
+e_sprite.c
+EffManager.c
+EffParticle.c
+SPool.c
+TPool.c
+crosshair.c
+hud.c
+console.c
+ConsoleBuffer.c
+edit.c
+sound_modder.c
+sound_system.c
+inf_message_system.c
+D:\infection\src\sound_system.c(128) : warning C4761: integral size mismatch in argument; conversion supplied
+D:\infection\src\sound_system.c(131) : warning C4761: integral size mismatch in argument; conversion supplied
+D:\infection\src\sound_system.c(134) : warning C4761: integral size mismatch in argument; conversion supplied
+D:\infection\src\sound_system.c(679) : warning C4761: integral size mismatch in argument; conversion supplied
+conversation.c
+damage.c
+jacktalks.c
+player.c
+recoil.c
+time_damage.c
+timefx.c
+enemies.c
+enemy_civilian.c
+enemy_rat.c
 enemy_zombie.c
-C:\infection\src\enemy_zombie.c(59) : warning C4013: 'game_message' undefined; assuming extern returning int
-C:\infection\src\enemy_zombie.c(82) : warning C4013: 'BloodExplosion' undefined; assuming extern returning int
-C:\infection\src\enemy_zombie.c(147) : warning C4013: 'handle_Vector' undefined; assuming extern returning int
-C:\infection\src\enemy_zombie.c(347) : warning C4013: 'system_message' undefined; assuming extern returning int
-C:\infection\src\enemy_zombie.c(115) : warning C4761: integral size mismatch in argument; conversion supplied
+fxbitmaps.c
+theta = RAND_FLOAT() * 2 * PI;
+beta = RAND_FLOAT() * PI;
+hash_table.c
+linked_list.c
+md5.c
+OneTimePads.c
+save_file.c
+explosions.c
+grenade_manager.c
+mini_rocket_manager.c
+molotov_manager.c
+NearestActorContainer.c
+weapon.c
+Ignoring AP in weapon, change this?
+No cheating while fighting
+No cheating while fighting
+Striping player
+inf_gui.c
+inf_meny.c
+xfont.c
+movie.c
+drawbbox.c
 Linking...
-LINK : warning LNK4075: ignoring /EDITANDCONTINUE due to /INCREMENTAL:NO specification
 
 
 
 <h3>Results</h3>
-infection.exe - 0 error(s), 6 warning(s)
+infection.exe - 0 error(s), 4 warning(s)
 </pre>
 </body>
 </html>

@@ -21,6 +21,9 @@
 #include "sound_system.h"
 #include "explosions.h"
 
+#include "infection.h" // hande_Vector function
+#include "fxbitmaps.h" // BloodExplosion function
+
 #define ENEMY_RAT_DETECT_RANGE	922694.0f
 #define ENEMY_RAT_EAT_RANGE		12000.0f
 #define ENEMY_RAT_DETECT_HIGHT	45.0f
@@ -33,7 +36,7 @@ void enemy_rat_init()
 {
 	rat_created = GE_FALSE;
 
-	soundsys_loadWaw(".\\sfx\\enemies\\rat\\die.wav", &rat_die);
+	soundsys_loadSound(".\\sfx\\enemies\\rat\\die.wav", 1, &rat_die, 1, TYPE_3D);
 }
 
 //Done when entering a anew level
@@ -126,7 +129,7 @@ void enemy_rat_newWorld(geWorld* World)
 		geXForm3d_RotateZ(r->XForm, r->Orientation.Z );
 		r->XForm->Translation = r->Position;
 
-		r->Actor = LoadActor(enemy_rat_def, World, 2.0f, GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE, r->XForm );
+		r->Actor = LoadActor(enemy_rat_def, World, 2.0f, GE_ACTOR_RENDER_MIRRORS | GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE, r->XForm );
 		r->health = 2;
 		r->counter = 0.0f;
 		r->preState = r->state = 0;
@@ -137,6 +140,8 @@ void enemy_rat_newWorld(geWorld* World)
 			error("Failed to create rat actor");
 			continue;
 		}
+		// enable shaddows
+		geActor_SetStencilShadow(r->Actor, GE_TRUE);
 
 		// make sure we can acces this data later when we only got the actor
 		geActor_SetUserData(r->Actor, (void*)r);
@@ -532,7 +537,7 @@ void enemy_rat_doDamage(Inf_Enemy_Rat* r, int damage){
 			r->Position.Y += 10.0f;
 			r->state = -1;
 			talkPower_Change( 5.0f );
-			soundsys_play3dsound(&rat_die, &r->Position, 3.0f, GE_FALSE);
+			soundsys_play3dsound(&rat_die, &r->Position, 3.0f, GE_FALSE, GE_FALSE);
 		}
 		else
 		{
@@ -542,7 +547,7 @@ void enemy_rat_doDamage(Inf_Enemy_Rat* r, int damage){
 	else
 	{
 		//game_message("The rat is dead");
-		soundsys_play3dsound(&e_splat, &r->Position, 5.0f, GE_FALSE);
+		soundsys_play3dsound(&e_splat, &r->Position, 5.0f, GE_FALSE, GE_FALSE);
 	}
 }
 
@@ -585,8 +590,9 @@ geVec3d* enemy_rat_getPosition(geActor* act){
 }
 
 geBoolean enemy_rat_damage(geActor* enemy, // the enemy that got hit
-				  unsigned char damage, // how many point damage does this weaopon damage do?
+				  int damage, // how many point damage does this weaopon damage do?
 				  char type, // damage type, se above
+				  char lbd,
 				  /* Location Based Damage Data */
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range
@@ -602,28 +608,30 @@ geBoolean enemy_rat_damage(geActor* enemy, // the enemy that got hit
 		return GE_FALSE;
 	}
 
-	
-	//eb.Min = r->ExtBox->Min;
-	//eb.Max = r->ExtBox->Max;
+	if( lbd ){
+		//eb.Min = r->ExtBox->Min;
+		//eb.Max = r->ExtBox->Max;
 
-	//geVec3d_Add(&r->ExtBox->Min, &r->Position, &eb.Min);
-	//geVec3d_Add(&r->ExtBox->Max, &r->Position, &eb.Max);
-	geActor_GetDynamicExtBox(r->Actor, &eb);
+		//geVec3d_Add(&r->ExtBox->Min, &r->Position, &eb.Min);
+		//geVec3d_Add(&r->ExtBox->Max, &r->Position, &eb.Max);
+		geActor_GetDynamicExtBox(r->Actor, &eb);
 
 
-/*
-// Collides a ray with box B.  The ray is directed, from Start to End.  
-//   Only returns a ray hitting the outside of the box.  
-//     on success, GE_TRUE is returned, and 
-//       if T is non-NULL, T is returned as 0..1 where 0 is a collision at Start, and 1 is a collision at End
-//       if Normal is non-NULL, Normal is the surface normal of the box where the collision occured.
-geBoolean GENESISCC geExtBox_RayCollision( const geExtBox *B, const geVec3d *Start, const geVec3d *End, 
-								geFloat *T, geVec3d *Normal );*/
-	if(! geExtBox_RayCollision( &eb, &fromPos, &toPos, 
-								NULL, NULL ) // don't save the data
-								)
-	{
-		return GE_TRUE;
+		/*
+		// Collides a ray with box B.  The ray is directed, from Start to End.  
+		//   Only returns a ray hitting the outside of the box.  
+		//     on success, GE_TRUE is returned, and 
+		//       if T is non-NULL, T is returned as 0..1 where 0 is a collision at Start, and 1 is a collision at End
+		//       if Normal is non-NULL, Normal is the surface normal of the box where the collision occured.
+		geBoolean GENESISCC geExtBox_RayCollision( const geExtBox *B, const geVec3d *Start, const geVec3d *End, 
+									geFloat *T, geVec3d *Normal );*/
+		
+		if(! geExtBox_RayCollision( &eb, &fromPos, &toPos, 
+									NULL, NULL ) // don't save the data
+									)
+		{
+			return GE_TRUE;
+		}
 	}
 
 	enemy_rat_doDamage(r, damage);

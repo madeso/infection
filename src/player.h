@@ -112,4 +112,10 @@ void player_is_on_ground_setup();
 void enter_water();
 void leave_water();
 
+void cleanUpStateBox();
+
+// ofr loading and clearing player actor and shaddow :)
+char player_loadDefinitions();
+void player_clearDefinitions();
+
 #endif

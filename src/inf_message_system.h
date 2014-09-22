@@ -25,10 +25,10 @@ the screen boundary.
 void init_messages();
 
 //input a system message
-void system_message(char *str);
+void system_message(const char *str);
 
 // add another game message
-void game_message(char *sz);
+void game_message(const char *sz);
 
 //render the messages
 geBoolean render_messages();

@@ -5,7 +5,7 @@
 #include "string.h"
 #include "stdio.h"
 
-#define STRING_LENGTH 80
+#include "log.h"
 
 struct _HashTable{
 	LinkedList** table;
@@ -13,7 +13,7 @@ struct _HashTable{
 	unsigned long elements;
 };
 
-long hashcode(char* key){
+long hashcode(const char* key){
 	// based on: http://www.informatics.susx.ac.uk/courses/dats/notes/html/node114.html
 	char c;
 	int i=0;
@@ -87,7 +87,7 @@ void HT_Destroy(HashTable* table){
 
 #define HT_DESTROY(a)	{ HT_Destroy(a); a=0; }
 
-void HT_Add(HashTable *table, int data, char* key){
+void HT_Add(HashTable *table, int data, const char* key){
 	int index=0;
 	if(! table ) return;
 
@@ -99,7 +99,7 @@ void HT_Add(HashTable *table, int data, char* key){
 	table->elements++;
 }
 
-int HT_Load(HashTable *table, char* fileName){
+int HT_Load(HashTable *table, const char* fileName){
 	FILE* f=0;
 	char key[STRING_LENGTH];
 	int data;
@@ -126,7 +126,7 @@ int HT_Load(HashTable *table, char* fileName){
 	return 1;
 }
 
-int HT_Find(HashTable *table, char* key, int* data){
+int HT_Find(HashTable *table, const char* key, int* data){
 	int index=0;
 	if(! table ) return 0;
 
@@ -136,7 +136,7 @@ int HT_Find(HashTable *table, char* key, int* data){
 	return LL_Find(table->table[index], key, data);
 }
 
-void HT_Remove(HashTable *table, char* key){
+void HT_Remove(HashTable *table, const char* key){
 	int index=0;
 	if(! table ) return;
 

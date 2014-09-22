@@ -53,7 +53,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386
-# ADD LINK32 winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386 /nodefaultlib:"libcd.lib"
+# ADD LINK32 winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcd.lib" /nodefaultlib:"libc.lib"
 # SUBTRACT LINK32 /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "infection - Win32 Debug"
@@ -80,7 +80,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcd.lib" /pdbtype:sept
+# ADD LINK32 winmm.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcd.lib" /nodefaultlib:"libc.lib" /pdbtype:sept
 # SUBTRACT LINK32 /pdb:none
 
 !ENDIF 
@@ -92,10 +92,6 @@ LINK32=link.exe
 # Begin Group "Source Files"
 
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
-# Begin Source File
-
-SOURCE=.\edit.c
-# End Source File
 # Begin Source File
 
 SOURCE=.\entity_iterate.c
@@ -118,15 +114,7 @@ SOURCE=.\inf_actor.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\inf_gui.c
-# End Source File
-# Begin Source File
-
 SOURCE=.\inf_lua.c
-# End Source File
-# Begin Source File
-
-SOURCE=.\inf_meny.c
 # End Source File
 # Begin Source File
 
@@ -162,6 +150,10 @@ SOURCE=.\options.c
 # End Source File
 # Begin Source File
 
+SOURCE=.\pickup.c
+# End Source File
+# Begin Source File
+
 SOURCE=.\proposed.c
 # End Source File
 # Begin Source File
@@ -186,7 +178,7 @@ SOURCE=.\decals.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\edit.h
+SOURCE=.\enemy_soldier.h
 # End Source File
 # Begin Source File
 
@@ -194,7 +186,15 @@ SOURCE=.\entity_iterate.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\extra.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\extra_genesis.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\fromto.h
 # End Source File
 # Begin Source File
 
@@ -210,15 +210,7 @@ SOURCE=.\inf_actor.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\inf_gui.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\inf_lua.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\inf_meny.h
 # End Source File
 # Begin Source File
 
@@ -251,6 +243,10 @@ SOURCE=.\multiint.h
 # Begin Source File
 
 SOURCE=.\options.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\pickup.h
 # End Source File
 # Begin Source File
 
@@ -399,6 +395,14 @@ SOURCE=.\ConsoleBuffer.c
 
 SOURCE=.\ConsoleBuffer.h
 # End Source File
+# Begin Source File
+
+SOURCE=.\edit.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\edit.h
+# End Source File
 # End Group
 # Begin Group "Sounds"
 
@@ -478,6 +482,14 @@ SOURCE=.\playerSounds.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\recoil.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\recoil.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\time_damage.c
 # End Source File
 # Begin Source File
@@ -503,6 +515,14 @@ SOURCE=.\enemies.c
 # Begin Source File
 
 SOURCE=.\enemies.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\enemy_civilian.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\enemy_civilian.h
 # End Source File
 # Begin Source File
 
@@ -540,14 +560,6 @@ SOURCE=.\fxbitmaps.h
 # Begin Group "Dictionaries"
 
 # PROP Default_Filter ""
-# Begin Source File
-
-SOURCE=.\avl.c
-# End Source File
-# Begin Source File
-
-SOURCE=.\avl.h
-# End Source File
 # Begin Source File
 
 SOURCE=.\hash_table.c
@@ -622,6 +634,22 @@ SOURCE=.\grenade_manager.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\mini_rocket_manager.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\mini_rocket_manager.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\molotov_manager.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\molotov_manager.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\NearestActorContainer.c
 # End Source File
 # Begin Source File
@@ -640,34 +668,6 @@ SOURCE=.\weapons.h
 # Begin Group "Include files"
 
 # PROP Default_Filter ""
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\include\actor.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\include\Basetype.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\G3d\Genesis.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\G3d\getypes.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\include\Vec3d.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\include\Xform3d.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\genesis3d\src\G3d\xtra_g3d.h
-# End Source File
 # End Group
 # Begin Group "files"
 
@@ -687,6 +687,56 @@ SOURCE=..\files\infection_flow.txt
 # Begin Source File
 
 SOURCE=..\files\luatest.txt
+# End Source File
+# End Group
+# Begin Group "Meny"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\inf_gui.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\inf_gui.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\inf_meny.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\inf_meny.h
+# End Source File
+# End Group
+# Begin Group "xfont"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g3dfonthack.c
+# PROP Exclude_From_Build 1
+# PROP Ignore_Default_Tool 1
+# End Source File
+# Begin Source File
+
+SOURCE=.\xfont.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\xfont.h
+# End Source File
+# End Group
+# Begin Group "Movie"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\movie.c
+# End Source File
+# Begin Source File
+
+SOURCE=.\movie.h
 # End Source File
 # End Group
 # Begin Source File

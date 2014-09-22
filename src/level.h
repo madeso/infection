@@ -155,7 +155,7 @@ typedef struct _Inf_MovingEntity{
 
 	char *name;
 #pragma GE_Documentation(name, "The name of this entity. Is used when referencing this entity")
-#pragma GE_DefaultValue(name, "Inf_SimpleDoor")
+#pragma GE_DefaultValue(name, "MovingEntity")
 
 	geBoolean enable;
 #pragma GE_Documentation(enable, "True if it should move")
@@ -209,6 +209,43 @@ typedef struct _Inf_Button{
 #pragma GE_DefaultValue(disableAfterUse, "True")
 } Inf_Button;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma GE_Type("Pickup.bmp")
+typedef struct _Inf_Pickup{
+#pragma GE_Published
+	int type;
+#pragma GE_Documentation(type, "The type of this pickup, please refere to the documentation")
+#pragma GE_DefaultValue(type, "0")
+
+	geVec3d			origin;
+#pragma GE_Origin(origin)
+#pragma GE_Documentation(origin, "The origin")
+
+	char *name;
+#pragma GE_Documentation(name, "The name of this entity. Is used when referencing this entity")
+#pragma GE_DefaultValue(name, "Pickup")
+
+	geBoolean enable;
+#pragma GE_Documentation(enable, "True if it is able to be picked up")
+#pragma GE_DefaultValue(enable, "True")
+
+	geBoolean trace;
+#pragma GE_Documentation(trace, "If true traces the hero to the ground, maximum distance is 300 texels")
+#pragma GE_DefaultValue(trace, "True" )
+
+#pragma GE_Private
+	geActor *actor;
+} Inf_Pickup;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 
 /*

@@ -32,30 +32,37 @@ void enemy_iterate(geWorld* World, float time);//Done evry frame
 #define DAMAGE_NORMAL			4
 #define DAMAGE_ELECTRICAL		5
 #define DAMAGE_TRANQUALICER		6
+#define DAMAGE_FIRE				7
+#define DAMAGE_ZOMBIE			8
 
 geBoolean enemy_isAlive(geActor* enemy);
 
 // Warning: if enemy is null the player is damaged
 geBoolean enemy_damage(geActor* enemy, // the enemy that got hit
-				  unsigned char damage, // how many point damage does this weaopon damage do?
+				  int damage, // how many point damage does this weaopon damage do?
 				  char type, // damage type, se above
+				  char lbd,
 				  /* Location Based Damage Data */
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range
 				  );
 
-geBoolean enemy_canDamage(geActor* enemy, // the enemy that potentially got hit
+geBoolean enemy_loopDamage(int damage, // how many point damage does this weaopon damage do?
+				  char type, // damage type, se above
+				  char lbd,
+				  /* Location Based Damage Data */
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range
 				  );
 
 
 // AI functions
-void Basic_MoveForward(geVec3d pos, geVec3d rot, float speed, geWorld* world, geExtBox *eb, geVec3d* newPos);
+char Basic_MoveForward(geVec3d pos, geVec3d rot, float speed, geWorld* world, geExtBox *eb, geVec3d* newPos);
 void Basic_ApplyGravity(geVec3d pos, float gravity, geWorld* world, geExtBox *eb, geVec3d *newPos);
 float enemy_canAttack(geVec3d a, geVec3d b, geWorld* World);
 
 void enemy_explosionDamage(geVec3d* location, float range, int damage);
+void enemy_fireExplosionDamage(geVec3d* location, float range, int damage);
 
 // A monster struct is the closest MONSTER to an existing MONSTER. Every MONSTER has a monster struct
 typedef struct _Monster {
@@ -73,7 +80,8 @@ typedef struct _Monster {
 #define MONSTER_FLAGS_FRIENDLY			32
 #define MONSTER_FLAGS_COMPUTER			64
 
-#define MONSTER_FLAGS_OF_ZOMBIE	(MONSTER_FLAGS_PLAYER | MONSTER_FLAGS_WEREWOLF | MONSTER_FLAGS_WAMPIRE | MONSTER_FLAGS_COMPANY | MONSTER_FLAGS_FRIENDLY )
+#define MONSTER_FLAGS_OF_ZOMBIE		(MONSTER_FLAGS_PLAYER | MONSTER_FLAGS_WEREWOLF | MONSTER_FLAGS_WAMPIRE | MONSTER_FLAGS_COMPANY | MONSTER_FLAGS_FRIENDLY | MONSTER_FLAGS_COMPUTER )
+#define MONSTER_FLAGS_OF_FRIENDLY	(MONSTER_FLAGS_WEREWOLF | MONSTER_FLAGS_WAMPIRE | MONSTER_FLAGS_COMPANY | MONSTER_FLAGS_ZOMBIE | MONSTER_FLAGS_COMPUTER )
 
 void getClosestPosition(geXForm3d* enemyDirectionAndPosition, int flags, Monster* monster);
 
@@ -84,6 +92,8 @@ void getClosestPosition(geXForm3d* enemyDirectionAndPosition, int flags, Monster
 float getAngleBetwen(const geVec3d* a, const geVec3d* b);
 void getDirectionVector(const geVec3d* from, const geVec3d* point, geVec3d* Result);
 int enemy_lookAtPos(const geVec3d *pos, const geXForm3d* eXForm, geVec3d* eRotation, float time);
+int enemy_fleeFromPos(const geVec3d *pos, const geXForm3d* eXForm, geVec3d* eRotation, float time);
+float enemy_distanceBetween(geVec3d a, geVec3d b, geWorld* World);
 
 geVec3d* enemy_getPosition(geActor* act);
 

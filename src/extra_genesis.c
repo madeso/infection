@@ -137,7 +137,7 @@ ScaleBitmap(srcBitmap,destBitmap);
 
 // NOTE: end Jeffs Code
 
-geBitmap* loadBitmapEx(char* fileName, int width, int height, geEngine* Engine)
+geBitmap* loadBitmapEx(const char* fileName, int width, int height, geEngine* Engine)
 {
 	geBitmap *srcBitmap; 
 	geBitmap *destBitmap; 
@@ -164,7 +164,7 @@ geBitmap* loadBitmapEx(char* fileName, int width, int height, geEngine* Engine)
 	return destBitmap;
 }
 
-geBitmap* loadBitmapExColorKey(char* fileName, int width, int height, geEngine* Engine, int index)
+geBitmap* loadBitmapExColorKey(const char* fileName, int width, int height, geEngine* Engine, int index)
 {
 	geBitmap *srcBitmap; 
 	geBitmap *destBitmap; 
@@ -245,6 +245,7 @@ void LookAt(geVec3d from, geVec3d point, geVec3d *Result)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 geBoolean renderBitmap(geBitmap *bmp, int x, int y)
 {
+	// @@@todo@@@ optimize so that it renders faster...
 	if( !geEngine_DrawBitmap(Engine, bmp, NULL, x, y ) )
 	{
 		printLog("Failed in render Image.\n");
@@ -260,7 +261,7 @@ geBoolean renderBitmap(geBitmap *bmp, int x, int y)
 //		LoadBmp
 //			Function for easy the loading of bitmaps with transperency
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-geBitmap* LoadBmp(char *filename)
+geBitmap* LoadBmp(const char *filename)
 {
 	//local variables
 	geVFile *File;
@@ -300,7 +301,7 @@ geBitmap* LoadBmp(char *filename)
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-geBitmap* LoadBmpNoColorKey(char *filename)
+geBitmap* LoadBmpNoColorKey(const char *filename)
 {
 	//local variables
 	geVFile *File;

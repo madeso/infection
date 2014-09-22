@@ -7,19 +7,20 @@ int errno;
 #include "globalGenesis.h"
 #include "inventory.h"
 #include <errno.h>
+#include "inf_message_system.h"
+#include "console.h"
+#include "init.h" // for getLevelFileName()
 
+//lua_State* luaVM=0;
+//#define LUA_FUNC(x)		int x(lua_State* luaVM)
 
-lua_State* luaVM=0;
-
-#define LUA_FUNC(x)		int x(lua_State* luaVM)
-
-LUA_FUNC(l_consoleMessage){
+LUA_FUNC(consoleMessage){
 	console_message( lua_tostring(luaVM, -1) );
 	lua_pushnumber(luaVM, 1);
 	return 1;
 }
 
-LUA_FUNC(l_gameMessage){
+LUA_FUNC(gameMessage){
 	int args;
 	if( (args = lua_gettop(luaVM)) != 1 ){
 		for(;args>0; args--)
@@ -33,11 +34,11 @@ LUA_FUNC(l_gameMessage){
 	return 1;
 }
 
-LUA_FUNC(l_errorMessage){
+LUA_FUNC(errorMessage){
 	char str[400];
 	int args;
 	int i=0;
-	char* tstr=0;
+	const char* tstr=0;
 
 	args = lua_gettop(luaVM);
 	sprintf(str, "Lua error");
@@ -55,20 +56,20 @@ LUA_FUNC(l_errorMessage){
 	return 1;
 }
 
-LUA_FUNC(l_playerHas){
+LUA_FUNC(playerHas){
 	int res=0;
 	res = inventory_has( lua_tostring(luaVM, -1) );
 	lua_pushboolean(luaVM, res);
 	return 1;
 }
 
-LUA_FUNC(l_playerGive){
+LUA_FUNC(playerGive){
 	inventory_add(lua_tostring(luaVM, -1) );
 	lua_pushnumber(luaVM, 1);
 	return 1;
 }
 
-LUA_FUNC(l_playerLoose){
+LUA_FUNC(playerLoose){
 	inventory_remove(lua_tostring(luaVM, -1) );
 	lua_pushnumber(luaVM, 1);
 	return 1;
@@ -76,10 +77,11 @@ LUA_FUNC(l_playerLoose){
 
 LUA_FUNC(lua_panic){
 	console_message( "Lua panic" );
+	exit_application();
 	return 0;
 }
 
-LUA_FUNC(l_getPos){
+LUA_FUNC(getPos){
 	lua_pushnumber(luaVM, XForm.Translation.X);
 	lua_pushnumber(luaVM, XForm.Translation.Y);
 	lua_pushnumber(luaVM, XForm.Translation.Z);
@@ -87,6 +89,10 @@ LUA_FUNC(l_getPos){
 }
 
 char inf_luaInit(){
+	if( luaVM ) {
+		// hmm
+		return 0;
+	}
 	luaVM = lua_open(); // 0 is stack size
 	if(! luaVM ) return 0;
 	
@@ -105,7 +111,7 @@ char inf_luaInit(){
 	lua_register(luaVM, "playerGive", l_playerGive);
 	lua_register(luaVM, "playerLoose", l_playerLoose);
 	lua_register(luaVM, "game_message", l_gameMessage);
-	lua_atpanic (luaVM, lua_panic);
+	lua_atpanic (luaVM, l_lua_panic);
 
 	/*lua_baselibopen(luaVM);
 	lua_iolibopen(luaVM);
@@ -118,18 +124,28 @@ char inf_luaInit(){
 void inf_luaExit(){
 	if( luaVM ){
 		lua_close(luaVM);
-		luaVM = 0;
+		//luaVM = 0;
 	}
+	luaVM = 0;
+}
+
+char inf_do_luafile(char* file){
+	lua_dofile(luaVM, file);
+	return 1;
 }
 
 char inf_luafile(char* file){
-	char finfile[200];
+	char finfile[400];
 	sprintf(finfile, ".\\levels\\%s\\LuaScript\\%s", getLevelFileName(), file);
 	lua_dofile(luaVM, finfile);
 	return 1;
 }
 
-char inf_luacommand(char* command){
-	lua_dostring(luaVM, command);
+char inf_luacommand(const char* command){
+	if( luaVM ) {
+		lua_dostring(luaVM, command);
+		return 1;
+	}
+	//printLog("Lua VM is null in inf_luacommand(const char*)! why?\n\n");
 	return 1;
 }

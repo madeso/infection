@@ -44,6 +44,7 @@ void BloodExplosion(geVec3d position);
 void fx_blast(geVec3d from, geVec3d to);
 
 void fx_grenadeExplosion(geVec3d at);
-void fx_fire(geVec3d* at, geBoolean reference);
+void fx_fireExplosion(geVec3d at);
+void fx_fire(geVec3d* at, geBoolean reference, float life);
 void fx_shootFire(geVec3d at, geVec3d direction);
 #endif

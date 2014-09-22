@@ -3,7 +3,7 @@
 #include "globalGenesis.h"
 
 
-void EditBox_set(sEditBox *seb, char* toSet){
+void EditBox_set(sEditBox *seb, const char* toSet){
 	if( !seb ) return;
 	seb->cPos = strlen(toSet);
 	sprintf(seb->data, "%s", toSet);
@@ -46,11 +46,13 @@ void EditBox_init(sEditBox *seb, char* str, int x, int y)
 	seb->y = y;
 }
 
-void EditBox_render(sEditBox *seb)
+void EditBox_render(sEditBox *seb, GE_RGBA color)
 {
 	if( !seb ) return;
 
-	geEngine_Printf(Engine, seb->x , seb->y , seb->data);
+	//geEngine_Printf(Engine, seb->x , seb->y , seb->data);
+
+	XFontMgr_PrintAt(fntMgr, seb->x, seb->y, seb->font, color, Camera, ((seb->printExtraString)?EXTRA_STRING:"%s"), seb->data);
 }
 
 void EditBox_clear(sEditBox *seb, char *str)

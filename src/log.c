@@ -5,11 +5,14 @@
 #include "infection.h"
 #include "player.h"
 #include "log.h"
+#include "inf_message_system.h"
+#include "console.h"
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //		printLog
 //			prints a string to the log file
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void printLog(char *c)
+void printLog(const char *c)
 {
 	//Error output log
 	FILE *log;
@@ -29,7 +32,7 @@ void printLog(char *c)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-void printExtended(char* sz)
+void printExtended(const char* sz)
 {
 	/*
 	I've done this way mainly because of two things:
@@ -47,7 +50,7 @@ void printExtended(char* sz)
 	}
 }
 
-void error(char* info)
+void error(const char* info)
 {
 	//Error output log
 	FILE *log;
@@ -71,7 +74,7 @@ void error(char* info)
 	}
 }
 
-void errorx(char* info, char* reason){
+void errorx(const char* info, const char* reason){
 		//Error output log
 	FILE *log;
 	//time varaibles
@@ -97,12 +100,12 @@ void errorx(char* info, char* reason){
 
 
 
-void cerror(char* info){
+void cerror(const char* info){
 	error(info);
 	console_message(info);
 }
 
-void cerrorx(char* info, char* reason){
+void cerrorx(const char* info, const char* reason){
 	errorx(info, reason);
 	console_message(info);
 	console_message(reason);

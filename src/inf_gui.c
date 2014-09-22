@@ -1,223 +1,192 @@
 #include "inf_gui.h"
-#include "extra_genesis.h"
-#include <stdlib.h>
-#include "log.h"
-#include "memory.h"
+#include <stdarg.h>
+#include "xfont.h"
 #include "globalGenesis.h"
 
-#define BS_UP	0
-#define BS_DOWN	1
-typedef struct _Button{
-	geBitmap* normal;
-	geBitmap* over;
-	int32 maxx;
-	int32 maxy;
-	int32 x;
-	int32 y;
-	ON_CLICK_FUNCTION* fn_callback;
-	int state;
-} Button;
+#define POS_HEADER_X			45
+#define POS_HEADER_Y			53
+#define POS_DESC_X				35
+#define POS_DESC_Y				570
 
-typedef struct _component {
-	void* data;
-	int type;
-} Component;
+void meny_renderDescription(char* str){
+	GE_RGBA color;
 
-struct _GUIHandler{
-	Component components[NUMBER_OF_COMPONENTS];
-	int index;
-};
+	color.r = color.g = color.b = 0.0f;
+	color.a = 255.0f;
 
-#define TYPE_UNUSED		0
-#define TYPE_BUTTON		1
+	XFontMgr_PrintAt(fntMgr, POS_DESC_X, POS_DESC_Y, kFontSmall, color, Camera, "%s", str );
+}
+void meny_renderHeader(char* str){
+	GE_RGBA color;
 
-#define MOUSE_GOING_UP		-1
-#define MOUSE_UP			0
-#define MOUSE_GOING_DOWN	1
-#define MOUSE_DOWN			2
+	color.r = color.g = color.b = 0.0f;
+	color.a = 255.0f;
 
-GUIHandler* gui_init(){
-	GUIHandler *handler=0;
+	XFontMgr_PrintAt(fntMgr, POS_HEADER_X, POS_HEADER_Y, kFontLarge, color, Camera, "%s", str );
+}
+void meny_renderText(int x, int y, int on, char* str){
+	GE_RGBA color;
+
+	if( on ){
+		color.r = color.g = color.b = 255.0f;
+	}
+	else {
+		color.r = color.g = color.b = 0.0f;
+	}
+	color.a = 255.0f;
+	XFontMgr_PrintAt(fntMgr, x, y, kFontMedium, color, Camera, "%s", str );
+}
+
+int meny_testWithinRegion(int x, int y, int rx, int ry, int lx, int ly){
+	if( x<rx ) return 0;
+	if( y<ry ) return 0;
+	if( x > (rx+lx) ) return 0;
+	if( y > (ry+ly) ) return 0;
+	return 1;
+}
+int meny_testWithinText(int x, int y, int mx, int my, char* str){
+	// int XFont_GetStringWidth(XFont *fnt, char *str);
+	// int XFont_GetStringHeight(XFont *fnt, char *str);
+	XFont* font;
+	int w;
+	int h;
+
+	font = XFontMgr_GetFont(fntMgr, kFontMedium);
+	h = XFont_GetSize(font);//, str);
+	w = XFont_GetStringWidth(font, str);
+
+	return meny_testWithinRegion(mx, my, x, y, w, h);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+void InfGui_sendCharacter(InfGui* to, char c){
+	switch( to->type ){
+	case IG_BUTTON:
+		break;
+	case IG_CHECK:
+		break;
+	case IG_EDIT:
+		break;
+	case IG_LABEL:
+		break;
+	}
+}
+void InfGui_render(InfGui* to){
+	if( !to->used ) return;
+	meny_renderText(to->x, to->y, to->data, to->text);
+}
+char InfGui_within(InfGui* to, int mx, int my){
+	return meny_testWithinText(to->x, to->y, mx, my, to->text);
+}
+
+
+void InfPage_sendClick(InfPage* to){
+	POINT mouse;
 	int i;
 
-	handler = malloc(sizeof(GUIHandler) );
-	memset(handler, 0, sizeof(GUIHandler) );
+	GetCursorPos(&mouse);
 
-	for(i=0; i<NUMBER_OF_COMPONENTS;i++){
-		handler->components[i].type = TYPE_UNUSED;
-		handler->components[i].data = 0;
-	}
-	handler->index = 0;
-
-	return handler;
-}
-
-geBoolean gui_updateButton(Button* button, int32 x, int32 y, int mousestate){
-	geBoolean theReturn = GE_TRUE;
-	geBoolean withinButton = GE_FALSE;
-
-	if( x >= button->x && y >= button->y ){
-		if( x <= button->maxx && y <= button->maxy ){
-			withinButton = GE_TRUE;
+	for(i=0;i<10; i++){
+		if( InfGui_within(&(to->list[i]), mouse.x, mouse.y) ){
+			to->list[i].action();
+			break;
 		}
 	}
-
-	if( withinButton ){
-		button->state = BS_DOWN;
-
-		if( mousestate == MOUSE_GOING_DOWN ){
-			theReturn = button->fn_callback();
-		}
-
-	} else {
-		button->state = BS_UP;
-	}
-
-	return theReturn;
 }
 
-int mouseState = MOUSE_UP;
+void InfPage_sendCharacter(InfPage* to, char c){
+	if(! to->countsOfEdits) return;
+	if( to->countsOfEdits == 1 ){
+		// single edit
+		InfGui_sendCharacter(to->theEdit, c);
+	}
+	else {
+		// multiple edits
+	}
+}
 
-geBoolean gui_update(GUIHandler* handler, int32 x, int32 y, geBoolean mousePressed){
+void InfPage_render(InfPage* to){
+	int i;
+	// render header 45*53
+	meny_renderHeader(to->title );
+
+	// render gui
+	for(i=0; i<10; i++){
+		InfGui_render( &(to->list[i]) );
+	}
+
+	// render description 35 * 570
+	if( to->description ){
+		meny_renderDescription(to->description);
+	}
+}
+
+void InfPage_process(InfPage* to){
+	POINT mouse;
+	int i;
+	int data=0;
+
+	GetCursorPos(&mouse);
+	to->description = 0;
+
+	for(i=0;i<10; i++){
+		data = 0;
+		if( InfGui_within(&(to->list[i]), mouse.x, mouse.y) ){
+			to->description = to->list[i].description;
+			data = 1;
+		}
+		if( to->list[i].type == IG_BUTTON ) to->list[i].data = data;
+	}
+}
+
+void InfPage_init(InfPage* to){
 	int i = 0;
-	geBoolean result;
-
-	// decide mouse state
-	static geBoolean previousMousePressed = GE_FALSE;
-	if( mousePressed != previousMousePressed ){
-		if(previousMousePressed){
-			mouseState = MOUSE_GOING_UP;
-		} else {
-			mouseState = MOUSE_GOING_DOWN;
-		}
-	} else {
-		if( previousMousePressed ){
-			mouseState = MOUSE_DOWN;
-		} else {
-			mouseState = MOUSE_UP;
-		}
+	to->countsOfEdits = 0;
+	to->goBackIndex = 0;
+	to->theEdit = 0;
+	to->title = 0;
+	for(i=0; i<10; i++){
+		to->list[i].action = 0;
+		to->list[i].data = 0;
+		to->list[i].description = 0;
+		to->list[i].text = 0;
+		to->list[i].type = 0;
+		to->list[i].used = 0;
+		to->list[i].x = 0;
+		to->list[i].y = 0;
 	}
-	previousMousePressed = mousePressed;
-
-	// update everything
-	for(i=0; i<handler->index; i++){
-		switch(handler->components[i].type ){
-		case TYPE_BUTTON:
-			result = gui_updateButton(handler->components[i].data, x, y, mouseState);
-			if( !result ) return GE_FALSE;
-			break;
-		case TYPE_UNUSED:
-			return GE_TRUE;
-		default:
-			printLog("Data unknown in gui_delete\n");
-			break;
-		}
-	}
-
-	return GE_TRUE;
 }
 
-geBoolean gui_renderButton(Button* button, geEngine* Engine){
-	geBitmap* bitmap=0;
-
-	if( button->state == BS_DOWN ){
-		bitmap = button->over;
-	} else {
-		bitmap = button->normal;
-	}
-
-	return geEngine_DrawBitmap(Engine, bitmap, NULL, button->x, button->y);
-}
-
-geBoolean gui_render(GUIHandler* handler, geEngine* Engine){
-	int i=0;
-	geBoolean result = GE_FALSE;
-
-	// update everything
-	for(i=0; i<handler->index; i++){
-		switch(handler->components[i].type ){
-		case TYPE_BUTTON:
-			result = gui_renderButton(handler->components[i].data, Engine);
-			if(! result ) return GE_FALSE;
-			break;
-		case TYPE_UNUSED:
-			return GE_TRUE;
-		default:
-			printLog("Data unknown in gui_delete\n");
-			break;
+void InfPage_setGui(InfPage* p, int index, char* title, char* desc,  int x, int y, int type, int initData, void (*action)() ){
+	if (index >= 10 ) return;
+	if( p->list[index].used ) return;
+	if( type == IG_BUTTON ){
+		if( p->countsOfEdits == 0 ){
+			p->theEdit = &(p->list[index]);
 		}
-	}
-
-	return GE_TRUE;
-}
-
-void gui_deleteButton(Button* button){
-	killBitmap(button->normal);
-	killBitmap(button->over);
-	free(button);
-}
-
-void gui_delete(GUIHandler* handler){
-	int i = 0;
-
-	for(i=0; i<handler->index; i++){
-		switch(handler->components[i].type ){
-		case TYPE_BUTTON:
-			gui_deleteButton(handler->components[i].data);
-			break;
-		case TYPE_UNUSED:
-			return;
-		default:
-			printLog("Data unknown in gui_delete\n");
-			break;
+		else {
+			p->theEdit = 0;
 		}
+		p->countsOfEdits ++;
 	}
 
-	free(handler);
-}
+	p->list[index].type = type;
+	p->list[index].used = 1;
 
-geBoolean gui_addButton(GUIHandler* handler, int32 x, int32 y, int32 width, int32 height, char* normalFile, char* overFile, geBoolean useAlpha, ON_CLICK_FUNCTION* onUse){
-	Button* button=0;
-
-	if( handler->index >= NUMBER_OF_COMPONENTS ){
-		printLog("Gui won't add button since there is too many components in the container\n");
-		return GE_FALSE;
-	}
-
-	button=malloc(sizeof(Button) );
-	memset(button, 0, sizeof(Button) );
-	button->x = x;
-	button->y = y;
-	button->maxx = x + width;
-	button->maxy = y + height;
-	button->fn_callback = onUse;
-
-	if( useAlpha ){
-		button->over = loadBitmapExColorKey(overFile, width, height, Engine, 0);
-		button->normal = loadBitmapExColorKey(normalFile, width, height, Engine, 0);
-		/*button->over = LoadBmp(overFile);
-		button->normal = LoadBmp(normalFile);
-		*/
-	} else{
-		/*button->over = LoadBmpNoColorKey(overFile);
-		button->normal = LoadBmpNoColorKey(normalFile);*/
-
-		button->over = loadBitmapEx(overFile, width, height, Engine);
-		button->normal = loadBitmapEx(normalFile, width, height, Engine);
-	}
-
-	if( !button->over ){
-		printLog("Failed to load over bitmap\n");
-		return GE_FALSE;
-	}
-	if( !button->normal ){
-		printLog("Failed to load bormal bitmap\n");
-		return GE_FALSE;
-	}
-
-	handler->components[handler->index].type = TYPE_BUTTON;
-	handler->components[handler->index].data = button;
-	handler->index++;
-
-	return GE_TRUE;
+	p->list[index].text = title;
+	p->list[index].description = desc;
+	p->list[index].x = x;
+	p->list[index].y = y;
+	p->list[index].data = initData;
+	p->list[index].action = action;
 }

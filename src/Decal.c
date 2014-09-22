@@ -424,6 +424,8 @@ geBoolean DecalMgr_AddDecal(DecalMgr *dMgr, int type, float timeToLive, GE_RGBA 
 		geBoolean res;
 		res = geWorld_PolyIsValid(dMgr->dcl[dMgr->Current]->Poly);*/
 		dMgr->dcl[dMgr->Current]->bAdded = GE_FALSE;
+		// sg addon
+		if( dMgr->dcl[dMgr->Current]->Poly )
 		geWorld_RemovePoly(dMgr->World, dMgr->dcl[dMgr->Current]->Poly);
 	}
 	
@@ -602,6 +604,8 @@ void DecalMgr_Tick(DecalMgr *dMgr, float dwTicks)
 			dMgr->dcl[i]->Visible = GE_FALSE;
 			
 			// remove the poly from the world
+			// sg addon
+			if( dMgr->dcl[i]->Poly )
 			geWorld_RemovePoly(dMgr->World, dMgr->dcl[i]->Poly);
 		}
 	}

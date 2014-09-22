@@ -71,7 +71,7 @@ void init_messages()
 {
 	isystem.wait = 0;
 	game.wait = 0;
-	soundsys_loadWaw(".\\sfx\\message.wav", &soundOnMessage);
+	soundsys_loadSound(".\\sfx\\message.wav", 1, &soundOnMessage, 0, TYPE_UNAFFECTED);
 
 	for(i = 0; i< NUMBER_OF_MESSAGES; i++)
 	{
@@ -97,7 +97,7 @@ void init_messages()
 //		system_message
 //			pop a system message  - system message in on the bottom left of screen
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void system_message(char *sz)
+void system_message(const char *sz)
 {
 	for(i = NUMBER_OF_MESSAGES-1; i > 0; i--)
 	{
@@ -126,7 +126,7 @@ void system_message(char *sz)
 //		game_message
 //			push a game message - game message is on the top left of the screen
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void game_message(char *sz)
+void game_message(const char *sz)
 {
 	for(i = NUMBER_OF_MESSAGES-1; i > 0; i--)
 	{
@@ -147,7 +147,7 @@ void game_message(char *sz)
 	//wait for 3 secs before clearing the messages
 	game.wait = 3;
 	// play message sound
-	soundsys_play_sound(&soundOnMessage, GE_FALSE);
+	soundsys_play_sound(&soundOnMessage, GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -165,17 +165,19 @@ void game_message(char *sz)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 geBoolean render_messages()
 {
+	GE_RGBA color;
+
+	color.r = color.g = color.b = 255.0f;
+	color.a = 255.0f;
+
 	//system messages
 	for( i= 0; i < NUMBER_OF_MESSAGES; i++)
 	{
 		if( isystem.messages[i][0] != 0 )
 		{
 			//if( geEngine_Printf(Engine, X_OFFSET , Height - Y_OFFSET*( NUMBER_OF_MESSAGES -i+1), messages[i]) == GE_FALSE )
-			if( geEngine_Printf(Engine, X_OFFSET , Height -Y_OFFSET*(i+1) , isystem.messages[i]) == GE_FALSE )
-			{
-				printLog("Message fail system message\n");
-				return GE_FALSE;
-			}
+			XFontMgr_PrintAt(fntMgr, X_OFFSET, Height -Y_OFFSET*(i+1), kFontSmall, color, Camera, "%s", isystem.messages[i] );
+			//if( geEngine_Printf(Engine, X_OFFSET , Height -Y_OFFSET*(i+1) , isystem.messages[i]) == GE_FALSE )
 		}
 		else
 		{
@@ -188,12 +190,10 @@ geBoolean render_messages()
 	{
 		if( game.messages[i][0] != 0 )
 		{
+			XFontMgr_PrintAt(fntMgr, X_OFFSET, Y_OFFSET*i + y_plus, kFontSmall, color, Camera, "%s", game.messages[i] );
 			//if( geEngine_Printf(Engine, X_OFFSET , Height - Y_OFFSET*( NUMBER_OF_MESSAGES -i+1), messages[i]) == GE_FALSE )
-			if( geEngine_Printf(Engine, X_OFFSET , Y_OFFSET*i + y_plus , game.messages[i]) == GE_FALSE )
-			{
-				printLog("Message fail game message\n");
-				return GE_FALSE;
-			}
+			//if( geEngine_Printf(Engine, X_OFFSET , Y_OFFSET*i + y_plus , game.messages[i]) == GE_FALSE )
+			//{ printLog("Message fail game message\n"); return GE_FALSE;	}
 		}
 		else
 		{

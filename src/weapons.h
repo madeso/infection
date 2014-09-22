@@ -61,55 +61,53 @@ geBoolean weapon_water(); //returns true if the weapon functions under water
 void weapon_strip();
 void weapon_give_all();
 
+/*
+@@@todo@@@
+Make this inyo a smarter way to do theese functions, perhaps an integer specifing the index.
+*/
+
 /* Give function */
+
+// the type parameter means
+// 0 = weapon with little ammo
+// 1 = ammo
+// 2 = everything
+
+// hand
 void weapon_give_knife();
-void weapon_give_hammer();
-void weapon_give_axe();
-void weapon_give_glock();
-void weapon_give_deagle();
-void weapon_give_tazer();
-void weapon_give_tranqualizer();
-void weapon_give_shotgun();
-void weapon_give_mag7();
-void weapon_give_sniper();
-void weapon_give_barret();
-void weapon_give_smg();
-void weapon_give_uzi();
-void weapon_give_ak47();
-void weapon_give_commando();
-void weapon_give_lft();
-void weapon_give_flamethrower();
-void weapon_give_molotov();
-void weapon_give_signalpistol();
-void weapon_give_launcher();
-void weapon_give_grenade();
-void weapon_give_c4();
-void weapon_give_mine();
+
+void weapon_give_glock(int type);
+void weapon_give_deagle(int type);
+
+void weapon_give_shotgun(int type);
+void weapon_give_sniper(int type);
+
+void weapon_give_smg(int type);
+void weapon_give_uzi(int type);
+
+void weapon_give_lft(int type);
+void weapon_give_molotov(int type);
+
+void weapon_give_grenade(int type);
+void weapon_give_minirocket(int type);
 
 /* Loose function */
 void weapon_loose_knife();
-void weapon_loose_hammer();
-void weapon_loose_axe();
+
 void weapon_loose_glock();
 void weapon_loose_deagle();
-void weapon_loose_tazer();
-void weapon_loose_tranqualizer();
+
 void weapon_loose_shotgun();
-void weapon_loose_mag7();
 void weapon_loose_sniper();
-void weapon_loose_barret();
+
 void weapon_loose_smg();
 void weapon_loose_uzi();
-void weapon_loose_ak47();
-void weapon_loose_commando();
+
 void weapon_loose_lft();
-void weapon_loose_flamethrower();
 void weapon_loose_molotov();
-void weapon_loose_signalpistol();
-void weapon_loose_launcher();
+
 void weapon_loose_grenade();
-void weapon_loose_c4();
-void weapon_loose_mine();
+void weapon_loose_minirocket();
 
 void weapon_apply();
 void weapon_deapply();

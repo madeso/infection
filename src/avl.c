@@ -1,5 +1,3 @@
-#define STRING_LENGTH 80
-
 #include "stdlib.h"
 #include "string.h"
 #include "stdio.h"

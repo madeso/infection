@@ -1,4 +1,5 @@
 #include <math.h>
+#include "recoil.h"
 
 #include "genesis.h"
 #include "player.h"
@@ -23,6 +24,11 @@
 #include "infection.h"
 
 #include "fxbitmaps.h"
+#include "fromto.h"
+
+#include "enemy_civilian.h" // so that we can talkto persons
+
+#include "inf_actor.h"
 
 #define STEP_SIZE 50.0f
 
@@ -38,19 +44,34 @@ GE_RGBA flashlightRgb;
 geFloat radius = 250.0f;
 geBoolean flashLightOn = GE_FALSE;
 geVec3d flashPos;
-#define FLASHLIGHT_ON()			if(!flashlightLight)	flashlightLight = geWorld_AddLight(World)
-#define FLASHLIGHT_OFF()		if( flashlightLight)	{ geWorld_RemoveLight(World, flashlightLight); flashlightLight=0;}
-#define UPDATE_FLASHLIGHT()		if( flashlightLight)	geWorld_SetLightAttributes( World, flashlightLight, &flashPos, &flashlightRgb, radius, GE_TRUE)
+#define FLASHLIGHT_ON()			if(!flashlightLight){	flashlightLight = geWorld_AddLight(World); }
+#define FLASHLIGHT_OFF()		if( flashlightLight)	{ geWorld_RemoveLight(World, flashlightLight); flashlightLight=0; }
+#define UPDATE_FLASHLIGHT()		if( flashlightLight)	geWorld_SetLightAttributes( World, flashlightLight, &flashPos, &flashlightRgb, radius, GE_FALSE)
+//#define UPDATE_FLASHLIGHT()		if( flashlightLight) {	geVec3d ang = {Angle.X, Angle.Y-270, 0}; geWorld_SetSpotLightAttributes( World, flashlightLight, &Pos, &flashlightRgb, radius, 80.0f, &ang, /*STYLE*/ 0, GE_TRUE); }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 geBoolean flashkeyDown = GE_FALSE;
 geBoolean usekeyDown = GE_FALSE;
 geBoolean qsaveDown = GE_FALSE;
 geBoolean qloadDown = GE_FALSE;
+geBoolean drugkeyDown = GE_FALSE;
 
 #ifdef MULTIPLE_JUMPS
 char player_jumps = 0;
 #endif
+
+geActor* playerActor=0;
+geActor_Def* playerActorDef=0;
+geMotion*		PlayerAnim_Jump=0;
+geMotion*		PlayerAnim_Fall=0;
+geMotion*		PlayerAnim_CIdle=0;
+geMotion*		PlayerAnim_CWalk=0;
+geMotion*		PlayerAnim_Idle=0;
+geMotion*		PlayerAnim_Walk=0;
+geMotion*		PlayerAnim_Run=0;
+geMotion*		PlayerAnim_WWalk=0;
+geMotion*		PlayerAnim_WIdle=0;
+geMotion*		PlayerAnim_Dead=0;
 
 #define TRACE_DISTANCE 100.0f
 void player_use(){
@@ -80,6 +101,9 @@ void player_use(){
 		int result = 0;
 
 		if(! Col.Model ){
+			if( Col.Actor ) {
+				talkto_civilian(Col.Actor);
+			}
 			return;
 		}
 
@@ -123,7 +147,7 @@ void trace_flashlight()
 		GE_COLLIDE_ALL,
 		0xffffffff,
 		cb_move,
-		1,
+		NULL,
 		&Col
 		)//end of function call
 		)//end of if
@@ -138,6 +162,31 @@ void trace_flashlight()
 void player_end()
 {
 	FLASHLIGHT_OFF();
+	KillActor(World, &(playerActor) );
+}
+
+char player_loadDefinitions() {
+	playerActorDef = LoadActorDef(".\\actors\\player.act");
+	if( !playerActorDef ) return 0;
+
+	PlayerAnim_Jump=	geActor_GetMotionByName(playerActorDef, "Jump" );
+	PlayerAnim_Fall=	geActor_GetMotionByName(playerActorDef, "Fall" );
+	PlayerAnim_CIdle=	geActor_GetMotionByName(playerActorDef, "C_Idle" );
+	PlayerAnim_CWalk=	geActor_GetMotionByName(playerActorDef, "Crawl" );
+	PlayerAnim_Idle=	geActor_GetMotionByName(playerActorDef, "Idle" );
+	PlayerAnim_Walk=	geActor_GetMotionByName(playerActorDef, "Walk" );
+	PlayerAnim_Run=		geActor_GetMotionByName(playerActorDef, "Run" );
+	PlayerAnim_WWalk=	geActor_GetMotionByName(playerActorDef, "Swim" );
+	PlayerAnim_WIdle=	geActor_GetMotionByName(playerActorDef, "TreadWater" );
+	PlayerAnim_Dead=	geActor_GetMotionByName(playerActorDef, "Die1" );
+	
+	geActor_GetMotionByName(playerActorDef, "C_Idle" );
+
+	return 1;
+}
+
+void player_clearDefinitions() {
+	geActor_DefDestroy(& playerActorDef ); playerActorDef = 0;
 }
 
 void player_start()
@@ -154,6 +203,37 @@ void player_start()
 		FLASHLIGHT_ON();
 		UPDATE_FLASHLIGHT();
 	}
+	recoil_clear();
+	
+	/*
+	GE_ACTOR_RENDER_NORMAL			(1<<0)		// Render in normal views
+	#define GE_ACTOR_RENDER_MIRRORS			(1<<1)		// Render in mirror views
+	#define GE_ACTOR_RENDER_ALWAYS
+	GE_ACTOR_RENDER_NORMAL |
+	*/
+	/*
+	for the shadows to render the actor render flags must be set to either 
+	GE_ACTOR_RENDER_NORMAL 
+	or 
+	GE_ACTOR_RENDER_ALWAYS 
+
+	if the actor alpha is set to 0 neither the actor nor the shadow should render... did you really set it to 0.0f or just a small value? 
+
+	my thoughts behind this were that an invisible actor never would be able to cast a shadow 
+
+	if you comment out 
+	if(P->OverallAlpha==0.0f) 
+	return GE_TRUE; 
+
+	in gePuppet_RenderShadowVolume 
+	the shadow should render without the actor (without any selfshadowing artifacts since the actor polys won't be sent to the driver in this case and therefore won't affect the stencil operations) 
+
+	the alpha problem with geEngine_FillRect is probably a bug... I would have to take a closer look, could be some renderstates I didn't reset correctly...
+	http://www.genesis3d.com/forum/viewtopic.php?topic=1005213&forum=3&1
+	*/
+	playerActor = LoadActor(playerActorDef, World, 2.0f, GE_ACTOR_RENDER_MIRRORS | GE_ACTOR_COLLIDE, &XForm);
+	geActor_SetStencilShadow(playerActor, GE_TRUE);
+	//geActor_SetAlpha(playerActor, 0.0f);
 }
 
 // this function is currently only called if the consoel isn't activated
@@ -206,13 +286,16 @@ void player_is_on_ground_setup()
 {
 	//check for collision from current position XForm.translation and 1 unit down
 	geVec3d Pos;
+	FromTo ft;
 	geVec3d_Set(&Pos,
 		XForm.Translation.X,
 		XForm.Translation.Y-0.5f,
 		XForm.Translation.Z
 		);
 	onGround = GE_FALSE;
-	
+
+	ft.from = XForm.Translation;
+	ft.to = Pos;
 	if	(geWorld_Collision(
 		World,					//The world
 		&ExtBox.Min,			//Boundingbox min
@@ -223,7 +306,7 @@ void player_is_on_ground_setup()
 		GE_COLLIDE_ALL,			//Collission type
 		0xffffffff,				//?
 		cb_move,				//?
-		NULL,					//?
+		&ft,					//?
 		&Col					//We need to save the collission info data
 		)//end of function call
 		)//end of if
@@ -236,9 +319,12 @@ geBoolean player_canStand(geFloat change)
 {
 	//check for collision from current position XForm.translation and 1 unit down
 	geVec3d nPos;
+	FromTo ft;
 	nPos = Pos;
 	nPos.Y = Pos.Y + change;
-	
+
+	ft.from = Pos;
+	ft.to = nPos;
 	if	(geWorld_Collision(
 		World,					//The world
 		&ExtBox.Min,			//Boundingbox min
@@ -249,7 +335,7 @@ geBoolean player_canStand(geFloat change)
 		GE_COLLIDE_ALL,			//Collission type
 		0xffffffff,				//?
 		cb_move,				//?
-		NULL,					//?
+		&ft,					//?
 		&Col					//We need to save the collission info data
 		)//end of function call
 		)//end of if
@@ -375,10 +461,12 @@ void cleanUpStateBox(){
 
 void player_crouchOrStand()
 {
-#define		COLLISION		geWorld_Collision(World,&ExtBox.Min,&ExtBox.Max,&fromPos,&Pos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff,cb_move,NULL,&lCol)
+#define		SETUPCOL		{ft.from; ft.to=Pos;}
+#define		COLLISION		geWorld_Collision(World,&ExtBox.Min,&ExtBox.Max,&fromPos,&Pos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff,cb_move,&ft,&lCol)
 	geVec3d fromPos;
 	geFloat change = 450.0f * TIME * heroTime;
 	GE_Collision lCol;
+	FromTo ft;
 	
 	fromPos = Pos;
 
@@ -407,6 +495,7 @@ void player_crouchOrStand()
 
 			cleanUpStateBox();
 			
+			SETUPCOL;
 			if( COLLISION )
 			{
 				//system_message("stand/crouch col");
@@ -433,6 +522,7 @@ void player_crouchOrStand()
 					
 					//game_message("b");
 
+					SETUPCOL;
 					if( COLLISION )
 					{
 						//system_message("crouch/stand col");
@@ -454,6 +544,7 @@ void player_crouchOrStand()
 				{
 					Pos.Y += change;
 					
+					SETUPCOL;
 					if( COLLISION )
 					{
 						//system_message("crouch/stand col");
@@ -467,6 +558,7 @@ void player_crouchOrStand()
 			}
 		}
 	}
+#undef SETUPCOL
 #undef COLLISION
 }
 
@@ -513,12 +605,14 @@ void point(geVec3d* pos, int type){
 
 char StepUp(geVec3d *cPos)
 {
-#define		COLLISION		geWorld_Collision(World,&ExtBox.Min,&ExtBox.Max,&fromPos,&toPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff,cb_move,NULL,&lCol)
+#define		SETUPCOLL		{ft.from=fromPos; ft.to=toPos;}
+#define		COLLISION		geWorld_Collision(World,&ExtBox.Min,&ExtBox.Max,&fromPos,&toPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff,cb_move,&ft,&lCol)
 	geVec3d fromPos;
 	geVec3d toPos;
 	GE_Collision lCol;
 	geFloat multi;
 	geVec3d front;
+	FromTo ft;
 
 	//geXForm3d_GetIn(&XForm, &front);
 	front.X = CurrentSpeed.X;
@@ -530,6 +624,7 @@ char StepUp(geVec3d *cPos)
 	fromPos.Y = Pos.Y; toPos.Y = cPos->Y + STEP_SIZE;
 	
 	
+	SETUPCOLL;
 	if( COLLISION )
 	{
 		toPos.Y = lCol.Impact.Y;
@@ -550,6 +645,7 @@ char StepUp(geVec3d *cPos)
 		front.Y = 0.0f;
 	geVec3d_AddScaled(&toPos, &front, multi, &toPos);
 	
+	SETUPCOLL;
 	if( COLLISION )
 	{
 		//point(&lCol.Impact, 0);
@@ -568,7 +664,7 @@ char StepUp(geVec3d *cPos)
 	//*
 	toPos.Y -= STEP_SIZE; // or STEP_SIZE
 	
-	
+	SETUPCOLL;
 	if( COLLISION )
 	{
 		toPos = lCol.Impact;
@@ -587,6 +683,7 @@ char StepUp(geVec3d *cPos)
 	
 	moved = 1;
 	return 0;
+#undef SETUPCOLL
 #undef COLLISION
 }
 
@@ -602,6 +699,8 @@ void reset_cursor()
 //			updates the player state based on the global interaction variables
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+float player_actor_time = 0.0f;
+
 void user_interaction()
 {
 	//-------------
@@ -610,6 +709,7 @@ void user_interaction()
 	
 	geFloat rightleft_speed;
 	geFloat updown_speed;
+	geXForm3d PlayerXForm;
 	
 	GetCursorPos(&MousePos);
 	
@@ -644,43 +744,36 @@ void user_interaction()
 		
 		//--------------------------------------------------------------------------------------------------------------------
 		
-		if(MousePos.x < Width/2) //Turn Left
-		{
-			Angle.Y += rightleft_speed;
-			if(Angle.Y >= 360.0f )
-				Angle.Y -= 360.0f;
+		// look
+		if(MousePos.x < Width/2) {
+			Angle.Y += rightleft_speed;	
 		}
-		
-		if(MousePos.x > Width/2) //Turn Right
-		{
+		if(MousePos.x > Width/2) {
 			Angle.Y -= rightleft_speed;
-			if( Angle.Y < 0.0f)
-				Angle.Y += 360.0f;
 		}
-		
-		if(MousePos.y < Height/2) //Look Up
-		{
+		if(MousePos.y < Height/2) {
 			Angle.X += updown_speed;
-			
-			if( Angle.X > 80.0f)
-			{
-				Angle.X = 80.0f;
-			}
-			
-			//if( Angle.X >= 360.0f )
-			//	Angle.X -= 360.0f;
 		}
-		
-		if( MousePos.y > Height/2) //Look Down
-		{
+		if( MousePos.y > Height/2) {
 			Angle.X -= updown_speed;
-			
-			if( Angle.X < -80.0f)
-			{
-				Angle.X = -80.0f;
-			}
-			//if( Angle.X < 0.0f )
-			//	Angle.X += 360.0f;
+		}
+		recoil_move(&Angle, TIME*enemyTime);
+
+
+		// nice up values
+		if( Angle.Y < 0.0f){
+			Angle.Y += 360.0f;
+		}
+		if(Angle.Y >= 360.0f ){
+			Angle.Y -= 360.0f;
+		}
+
+		// limmit
+		if( Angle.X > 80.0f){
+			Angle.X = 80.0f;
+		}
+		if( Angle.X < -80.0f){
+			Angle.X = -80.0f;
 		}
 		
 		reset_cursor();
@@ -835,7 +928,7 @@ void user_interaction()
 							ySpeed *= timedamage_has(TIMEDAMAGE_DRUG) ? 1.3f : 1.0f;
 							//keys[ controls.jump ] = GE_FALSE;
 							
-							soundsys_play_sound( &jump[ rand()%3 ], GE_FALSE );
+							soundsys_play_sound( &jump[ rand()%3 ], GE_FALSE, TYPE_STOP, 0.0f, 1.0f );
 						}
 					}
 				}
@@ -864,6 +957,19 @@ void user_interaction()
 		else
 		{
 			flashkeyDown = GE_FALSE;
+		}
+
+		if( keys[ controls.drugKey ] )
+		{
+			if( !drugkeyDown )
+			{
+				drugkeyDown = GE_TRUE;
+				timedamage_add(TIMEDAMAGE_DRUG, 5);
+			}
+		}
+		else
+		{
+			drugkeyDown = GE_FALSE;
 		}
 		
 		//Down
@@ -982,7 +1088,71 @@ void user_interaction()
 		{
 			qsaveDown = GE_FALSE;
 		}
+
+		// impotant - set the position and orientation of the character
+		geXForm3d_SetIdentity(&PlayerXForm);
+		geXForm3d_RotateY( &PlayerXForm, (Angle.Y + 180.0f) * DEG);
+		PlayerXForm.Translation = Pos;
+		PlayerXForm.Translation.Y += ExtBox.Min.Y;
+
+		// set player animations
+#define ITERATE_TIME(maxTime)	{ player_actor_time+=TIME*heroTime; while(player_actor_time>maxTime) player_actor_time-=maxTime; }
+
+		if( player_state != STATE_WATER ) {
+			if(player_is_on_ground() ) {
+				char moved = keys[controls.left] || keys[controls.right] || keys[controls.forward] || keys[controls.backward];
+				if( keys[controls.crouch] ) {
+					if( moved ) {
+						ITERATE_TIME(1.29f);
+						geActor_SetPose(playerActor, PlayerAnim_CWalk, player_actor_time, &PlayerXForm );
+					}
+					else {
+						ITERATE_TIME(1.29f);
+						geActor_SetPose(playerActor, PlayerAnim_CIdle, player_actor_time, &PlayerXForm );
+					}
+				}
+				else {
+					if( moved ) {
+						if( keys[controls.holdwalk] ) {
+							ITERATE_TIME(1.0f);
+							geActor_SetPose(playerActor, PlayerAnim_Walk, player_actor_time, &PlayerXForm );
+						}
+						else {
+							ITERATE_TIME(0.96f);
+							geActor_SetPose(playerActor, PlayerAnim_Run, player_actor_time, &PlayerXForm );
+						}
+					}
+					else {
+						ITERATE_TIME(1.29f);
+						geActor_SetPose(playerActor, PlayerAnim_Idle, player_actor_time, &PlayerXForm );
+					}
+				}
+			}
+			else {
+				if( ySpeed > 0.0f ) {
+					geActor_SetPose(playerActor, PlayerAnim_Fall, 0.08f, &PlayerXForm );
+				}
+				else {
+					geActor_SetPose(playerActor, PlayerAnim_Jump, 0.04f, &PlayerXForm );
+				}
+			}
+		}
+		else {
+			if( moved ) {
+				ITERATE_TIME(1.13f);
+				geActor_SetPose(playerActor, PlayerAnim_WWalk, player_actor_time, &PlayerXForm );
+			}
+			else {
+				ITERATE_TIME(1.33f);
+				geActor_SetPose(playerActor, PlayerAnim_WIdle, player_actor_time, &PlayerXForm );
+			}
+		}
+
 	}//end of player alive
+	else {
+		// set player anim dead
+		geActor_SetPose(playerActor, PlayerAnim_Dead, 1.0f, &PlayerXForm );
+	}
 	
 	
 		if( keys[ controls.quickLoad ] )
@@ -1003,8 +1173,11 @@ void user_interaction()
 
 void StepDown(geVec3d* cPos){
 	geVec3d toPos = *cPos;
+	FromTo ft;
 	toPos.Y -= (speed * TIME * heroTime) ;
 	
+	ft.from = *cPos;
+	ft.to = toPos;
 	//if( moved ) {
 		if( !cheats.ghost && geWorld_Collision(
 			World,					//The world
@@ -1016,7 +1189,7 @@ void StepDown(geVec3d* cPos){
 			GE_COLLIDE_ALL,			//Collission type
 			0xffffffff,				//?
 			cb_move,				//?
-			NULL,					//?
+			&ft,					//?
 			&Col					//We need to save the collission info data
 			)//end of function call
 			)//end of if
@@ -1031,12 +1204,16 @@ void StopXZ()
 {
 	geVec3d prePos;
 	geFloat slide;
+	FromTo ft;
 	
 	prePos = Pos;
 
 	Pos.X += CurrentSpeed.X;
 	Pos.Y += CurrentSpeed.Y ;
 	Pos.Z += CurrentSpeed.Z;
+
+	ft.from = prePos;
+	ft.to = Pos;
 	
 	if( !cheats.ghost && geWorld_Collision(
 		World,					//The world
@@ -1048,7 +1225,7 @@ void StopXZ()
 		GE_COLLIDE_ALL,			//Collission type
 		0xffffffff,				//?
 		cb_move,				//?
-		NULL,					//?
+		&ft,					//?
 		&Col					//We need to save the collission info data
 		)//end of function call
 		)//end of if
@@ -1064,6 +1241,9 @@ void StopXZ()
 			Pos.Y -= Col.Plane.Normal.Y * slide;
 			Pos.Z -= Col.Plane.Normal.Z * slide;
 			
+			ft.from = prePos;
+			ft.to = Pos;
+
 			//did we step through a crack in the wall
 			if	(geWorld_Collision(
 				World,					//The world
@@ -1075,7 +1255,7 @@ void StopXZ()
 				GE_COLLIDE_ALL,			//Collission type
 				0xffffffff,				//?
 				cb_move,				//?
-				NULL,					//?
+				&ft,					//?
 				&Col					//We need to save the collission info data
 				)//end of function call
 				)//end of if
@@ -1087,6 +1267,9 @@ void StopXZ()
 					Pos.Y -= Col.Plane.Normal.Y * slide;
 					Pos.Z -= Col.Plane.Normal.Z * slide;
 					
+					ft.from = prePos;
+					ft.to = Pos;
+
 					//did we step through a crack in the wall
 					if	(geWorld_Collision(
 						World,					//The world
@@ -1098,7 +1281,7 @@ void StopXZ()
 						GE_COLLIDE_ALL,			//Collission type
 						0xffffffff,				//?
 						cb_move,				//?
-						NULL,					//?
+						&ft,					//?
 						&Col					//We need to save the collission info data
 						)//end of function call
 						)//end of if
@@ -1109,6 +1292,9 @@ void StopXZ()
 						Pos.Y -= Col.Plane.Normal.Y * slide;
 						Pos.Z -= Col.Plane.Normal.Z * slide;
 						
+						ft.from = prePos;
+						ft.to = Pos;
+
 						//did we step through a crack in the wall
 						if	(geWorld_Collision(
 							World,					//The world
@@ -1120,7 +1306,7 @@ void StopXZ()
 							GE_COLLIDE_ALL,			//Collission type
 							0xffffffff,				//?
 							cb_move,				//?
-							NULL,					//?
+							&ft,					//?
 							&Col					//We need to save the collission info data
 							)//end of function call
 							)//end of if
@@ -1156,6 +1342,7 @@ void apply_gravity()
 	geBoolean preLanded = landed;
 	geFloat sq_speed;
 	char do_bounce = 0;
+	FromTo ft;
 	
 	StopXZ();
 	prePos = Pos;
@@ -1194,6 +1381,9 @@ void apply_gravity()
 	
 	//if we have landed, we have not landed again - so set it to false
 	landed = GE_FALSE;
+
+	ft.from = prePos;
+	ft.to = Pos;
 	
 	//check collision
 	if( !cheats.ghost && geWorld_Collision(
@@ -1206,7 +1396,7 @@ void apply_gravity()
 		GE_COLLIDE_ALL,			//Collission type
 		0xffffffff,				//?
 		cb_move,				//?
-		NULL,					//?
+		&ft,					//?
 		&Col					//We need to save the collission info data
 		)//end of function call
 		)//end of if
@@ -1227,7 +1417,7 @@ void apply_gravity()
 					   )
 					{
 						//do_bounce = 1; // No need to set it' since it's already set
-						soundsys_play_sound( &boing, GE_FALSE );
+						soundsys_play_sound( &boing, GE_FALSE, TYPE_STOP, 0.0f, 1.0f);
 					}
 					else
 					{
@@ -1250,7 +1440,7 @@ void apply_gravity()
 					{
 						//sound
 						if( ySpeed < 0.0f )
-							soundsys_play_sound(&land_normal[rand()%3], GE_FALSE);
+							soundsys_play_sound(&land_normal[rand()%3], GE_FALSE, TYPE_PLAY, SOUND_SURROUND, 1.0f);
 					}else if(sq_speed < 1600.0f )
 					{
 						//damage 25
@@ -1301,6 +1491,9 @@ void apply_gravity()
 		Pos.X -= Col.Plane.Normal.X * slide;
 		Pos.Y -= Col.Plane.Normal.Y * slide;
 		Pos.Z -= Col.Plane.Normal.Z * slide;
+
+		ft.from = prePos;
+		ft.to = Pos;
 		
 		//did we step through a crack in the wall
 		if	(geWorld_Collision(
@@ -1313,7 +1506,7 @@ void apply_gravity()
 			GE_COLLIDE_ALL,			//Collission type
 			0xffffffff,				//?
 			cb_move,				//?
-			NULL,					//?
+			&ft,					//?
 			&Col					//We need to save the collission info data
 			)//end of function call
 			)//end of if

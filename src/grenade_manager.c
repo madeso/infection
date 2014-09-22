@@ -6,24 +6,6 @@
 #include "globals.h"
 
 #define GRAVITY			500.0f
-/*
-#define NUMMBER_OF_GRENADES					10
-#define GRENADE_DAMAGE_RADIUS_SQUARE		10000.0f 
-
-typedef struct _InfGrenade {
-	geBoolean active;
-	float timeLeftToBang;
-	geActor* grenade;
-	geVec3d position;
-	geVec3d velocity;
-	geXForm3d xform; // grenade xform
-} InfGrenade;
-
-geActor_Def* grenadeActor;
-InfGrenade grenades[NUMBER_OF_GRENADES];
-
-void weapon_grenade_bang(geVec3d position, float radius);
-*/
 
 geWorld* grenadeCurrentWorld = 0;
 int grenadeIndex = 0;
@@ -35,7 +17,7 @@ void hide_grenade_ex(InfGrenade* grenade){
 	geWorld_SetActorFlags(grenadeCurrentWorld, grenade->grenade, 0);
 }
 void show_grenade(int i){
-	geWorld_SetActorFlags(grenadeCurrentWorld, grenades[i].grenade, GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE);
+	geWorld_SetActorFlags(grenadeCurrentWorld, grenades[i].grenade, GE_ACTOR_RENDER_MIRRORS | GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE);
 }
 void kill_all_grenades(){
 	int i;
@@ -92,7 +74,7 @@ char weapon_grenade_init(){
 }
 
 void weapon_grenade_proccess(float timePassed){
-#define		COLLISION		geWorld_Collision(grenadeCurrentWorld,&(g->box.Min),&(g->box.Max),&(g->position),&newPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff, cb_move ,1, &lCol)
+#define		COLLISION		geWorld_Collision(grenadeCurrentWorld,&(g->box.Min),&(g->box.Max),&(g->position),&newPos,GE_CONTENTS_SOLID_CLIP,GE_COLLIDE_ALL,0xffffffff, cb_move, 0, &lCol)
 	int i;
 	InfGrenade* g;
 	geVec3d newPos;

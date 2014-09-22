@@ -20,8 +20,10 @@
 #include "inf_lua.h"
 #include "ConsoleBuffer.h"
 #include "inf_meny.h"
+#include "movie.h"
 
 ConsoleBuffer* consoleBuffer;
+GE_RGBA console_fontColor;
 
 #define COMMAND_FAILED "Command not accepted"
 
@@ -33,7 +35,7 @@ sEditBox console_inputLine;
 char lines[CONSOLE_LINES][INPUT_LENGTH];
 char* currentBuffer;
 
-void console_message(char* msg)
+void console_message(const char* msg)
 {
 	int i;
 	if( !msg ) return;
@@ -65,21 +67,26 @@ void render_console()
 	int i;
 	GE_RGBA console_color;
 	
+	console_fontColor.r = console_fontColor.g = console_fontColor.b = ( !renderMeny() )? 255.0f : 0.0f;
+	console_fontColor.a = 255.0f;
+	
 	console_color.r = console_color.g = console_color.b = ( !renderMeny() )?0.0f:255.0f;
 	console_color.a = 120.0f;
 	
 	geEngine_FillRect(Engine, &Rect, &console_color);
 	
-	geEngine_Printf(Engine, 20 , 20 , ">");
+	//geEngine_Printf(Engine, 20 , 20 , ">");
 	if( currentBuffer ){
-		geEngine_Printf(Engine, 30 , 20 , currentBuffer);
+		//geEngine_Printf(Engine, 30 , 20 , currentBuffer);
+		XFontMgr_PrintAt(fntMgr, 20, 20, kFontSmall, console_fontColor, Camera, "> %s", currentBuffer);
 	} else {
-		EditBox_render(&console_inputLine);
+		EditBox_render(&console_inputLine, console_fontColor);
 	}
 	
 	for(i=0; i< CONSOLE_LINES; i++)
 	{
-		geEngine_Printf(Engine, 30 , 40+i*20 , lines[i]);
+		//geEngine_Printf(Engine, 30 , 40+i*20 , lines[i]);
+		XFontMgr_PrintAt(fntMgr, 30, 40+i*20, kFontSmall, console_fontColor, Camera, "%i: %s", i+1, lines[i]);
 	}
 }
 
@@ -119,7 +126,10 @@ void console_delete(){
 
 void console_init()
 {
-	EditBox_init(&console_inputLine, "", 30, 20);
+	EditBox_init(&console_inputLine, "", 20, 20);
+	console_inputLine.font = kFontSmall;
+	console_inputLine.printExtraString = 1;
+	
 	//clear the lines
 	{
 		int i;
@@ -128,7 +138,7 @@ void console_init()
 			sprintf(lines[i], "");
 		}
 	}
-
+	
 	consoleBuffer = consoleBuffer_init(BUFFER_COUNT);
 }
 
@@ -137,16 +147,16 @@ void fgetln(char* str, FILE* f)
 {
 	unsigned int cpos = 0;
 	int ret;
-
+	
 	while( 1 )
 	{
 		ret = fgetc(f );
 		if( ret == EOF ) break;
 		if( ret == '\n' ) break;
-
+		
 		str[cpos] = (char) ret;
 		cpos++;
-
+		
 		if( cpos == 199) break;
 	}
 	str[cpos] = 0;
@@ -158,7 +168,7 @@ void doExecute_scriptFile(FILE *f)
 {
 	char command[200];
 	memset(command, 0, sizeof(char) * 200);// set it to a known value
-
+	
 	while( !feof(f) )
 	{
 		fgetln(command, f);
@@ -166,9 +176,9 @@ void doExecute_scriptFile(FILE *f)
 	}
 }
 
-void execute_scriptFile(char* file){
+void execute_scriptFile(const char* file){
 	FILE* f = 0;
-
+	
 	char scriptFile[200];
 	sprintf(scriptFile, ".\\levels\\%s\\InfScript\\%s", getLevelFileName(), file);
 	f= fopen(scriptFile, "r");
@@ -185,440 +195,1325 @@ void execute_scriptFile(char* file){
 }
 
 // execute a command
-void execute_command(char *input)
+void execute_command(const char *input)
 {
-	char c;
-	char processingString = 0;
-	int stringPos=0;
-	int commandPos=0;
-	int inputPos=0;
-
-	char command[10][200];
-
 	if( is_string_null(input) ) return;
-
-	for( c= 0; c<10; c++)
-		memset(&(command[c]), 0, 200 );
 	
 	sprintf(str, "Recieved command: %s", input);
 	console_message(str);
 	sprintf(str, "Recieved command: %s.\n", input);
 	printLog(str);
-	
-	// stor input in the command string array
-	while( 1 )
-	{
-		c = input[inputPos];
-		inputPos++;
-		
-		if( c== 0 )
-		{
-			command[ commandPos ][ stringPos ] = 0;
-			break;
-		}
-		
-		if( !processingString )
-		if( stringPos != 0 && c == ' ')
-		{
-			command[ commandPos ][ stringPos ] = 0;
-			commandPos ++;
-			stringPos = 0;
-			if( commandPos == 10 ) break;
-		}
 
-		if(c != ' ' || processingString)
-		{
-			if(! processingString )
-				if( c=='*' )
-				{
-					processingString = 1;
-					continue;
-				}
-			command[commandPos][stringPos] = c;
-			stringPos++;
-
-			if( stringPos == 99 )
-			{
-				command[commandPos][stringPos] = 0;
-				stringPos = 0;
-				commandPos++;
-				if( commandPos == 10 ) break;
-			}
-		}
+	if( strcmp(input, "exit")==0 ) {
+		exit_application();
 	}
+	else if( strcmp(input, "new")==0 ) {
+		new_game();
+	}
+	else {
+		inf_luacommand( input );
+	}
+}
 
-	if( _stricmp(command[0], "level")==0 ){
-		if( LoadLevel( command[1], 0 ) )
-		{
+char levelToLoad[200];
+char loadLevel = 0;
+void checkToLoadLevel() {
+	if( loadLevel ) {
+		if( LoadLevel(levelToLoad, 0) ) {
 			console_message("Level loaded");
 		}
-		else
-		{
+		else {
 			console_message("Failed to load level");
 		}
-	} else if( _stricmp(command[0], "weaponname")==0 ){
-		cheats.doPrint = !cheats.doPrint;
-		console_message( cheats.doPrint ? "WeaponName is on": "WeaponName is off" );
-	} else if( _stricmp(command[0], "bouncy")==0 ){
-		cheats.bouncy = !cheats.bouncy;
-		console_message( cheats.bouncy? "Bouncy mode is on": "Bouncy mode is off" );
-	} else if( _stricmp(command[0], "bbox")==0 ){
-		cheats.bbox = !cheats.bbox;
-		console_message( cheats.bbox? "BBox mode is on": "BBox mode is off" );
-	} else if( _stricmp(command[0], "textureprint")==0 ){
-		cheats.texturePrint = !cheats.texturePrint;
-		console_message( cheats.texturePrint ? "texturePrint is on": "texturePrint is off" );
-	} else if( _stricmp(command[0], "timeout")==0 ){
-		float time=0.0f;
-		char com = 0;
-		sscanf(command[1], "%f", &time);
-
-		if( _stricmp(command[2], "script")==0 ){
-			com = 1;
-		} else if( _stricmp(command[2], "conv")==0 ){
-			com = 2;
-		} else if( _stricmp(command[2], "lua")==0 ){
-			com = 3;
-		} else if( _stricmp(command[2], "luas")==0 ){
-			com = 4;
-		} else if( _stricmp(command[2], "com")==0 ){
-			com = 5;
-		}
-
-		if( com ) timeout_add(time, command[3], com-1 );
-		else console_message(COMMAND_FAILED);
-		{
-			char str[200];
-			sprintf(str, "Command will be executed after %f seconds", time);
-			console_message(str);
-		}
-	} else if( _stricmp(command[0], "weaponflash")==0 ){
-		options.weaponFlash = !options.weaponFlash;
-		// EPILEPSY
-		if( options.weaponFlash )
-			console_message("WARNING: USING THIS MODE MAY CAUSE EPILEPTIC SEIZURES, USE IT ON YOUR OWN RISK");
-		console_message( options.weaponFlash ? "WeaponFlash is on": "WeaponFlash is off" );
-	} else if( _stricmp(command[0], "god")==0 ){
-		cheats.god = !cheats.god;
-		console_message( cheats.god ? "God is on": "God is off" );
-	} else if( _stricmp(command[0], "ammoking")==0 ){
-		cheats.unlimited_ammo = !cheats.unlimited_ammo;
-		console_message( cheats.unlimited_ammo ? "AmmoKing is on": "AmmoKing is off" );
-	} else if( _stricmp(command[0], "magtotheteeth")==0 ){
-		cheats.unlimited_mag = !cheats.unlimited_mag;
-		console_message( cheats.unlimited_mag ? "You got magazines to the teeth": "You lost your precios magazines" );
-	} else if( _stricmp(command[0], "ghost")==0 ){
-		cheats.ghost = !cheats.ghost;
-		console_message( cheats.ghost ? "Ghost is on": "Ghost is off" );
-	} else if( _stricmp(command[0], "fps")==0 ){
-		cheats.printFps = !cheats.printFps;
-		console_message( cheats.printFps ? "FPS is on": "FPS is off" );
-	} else if( _stricmp(command[0], "debug")==0 ){
-		cheats.debug = !cheats.debug;
-		console_message( cheats.debug ? "Debug is on": "Debug is off" );
-	} else if( _stricmp(command[0], "log")==0 ){
-		printLog(command[1] );
-		printLog("\n");
-	} else if( _stricmp(command[0], "materialprint")==0 ){
-		cheats.materialPrint = !cheats.materialPrint;
-		console_message( cheats.materialPrint ? "materialPrint is on": "materialPrint is off" );
-	} else if( _stricmp(command[0], "give")==0 ){
-		if( _stricmp(command[1], "all")==0 ){
-			console_message("You got evrything you was supposed to have");
-			weapon_give_all();
-		} else if( _stricmp(command[1], "drug")==0 ){
-			timedamage_add(TIMEDAMAGE_DRUG);
-		} else if( _stricmp(command[1], "fire")==0 ){
-			timedamage_add(TIMEDAMAGE_FIRE);
-		} else if( _stricmp(command[1], "zbite")==0 ){
-			timedamage_add(TIMEDAMAGE_ZOMBIEBITE);
-		} else if( _stricmp(command[1], "ibite")==0 ){
-			timedamage_add(TIMEDAMAGE_INFECTEDBITE);
-		} else if( _stricmp(command[1], "lava")==0 ){
-			timedamage_add(TIMEDAMAGE_LAVADAMAGE);
-		} else if( _stricmp(command[1], "damage")==0 ){
-			int i;
-			i = atoi(command[2] );
-			if( i > 255 ) i= 255;
-			if( i < 0 ) i = 0;
-			damage(i);
-		} else if( _stricmp(command[1], "xdamage")==0 ){
-			int i;
-			i = atoi(command[2] );
-			if( i > 255 ) i= 255;
-			if( i < 0 ) i = 0;
-			armor_piercing_damage(i);
-		} else if( _stricmp(command[1], "knife")==0 ){
-			weapon_give_knife();
-		} else if( _stricmp(command[1], "hammer")==0 ){
-			weapon_give_hammer();
-		} else if( _stricmp(command[1], "axe")==0 ){
-			weapon_give_axe();
-		} else if( _stricmp(command[1], "glock")==0 ){
-			weapon_give_glock();
-		} else if( _stricmp(command[1], "deagle")==0 ){
-			weapon_give_deagle();
-		} else if( _stricmp(command[1], "tazer")==0 ){
-			weapon_give_tazer();
-		} else if( _stricmp(command[1], "tranqualizer")==0 ){
-			weapon_give_tranqualizer();
-		} else if( _stricmp(command[1], "shotgun")==0 ){
-			weapon_give_shotgun();
-		} else if( _stricmp(command[1], "mag7")==0 ){
-			weapon_give_mag7();
-		} else if( _stricmp(command[1], "sniper")==0 ){
-			weapon_give_sniper();
-		} else if( _stricmp(command[1], "barret")==0 ){
-			weapon_give_barret();
-		} else if( _stricmp(command[1], "smg")==0 ){
-			weapon_give_smg();
-		} else if( _stricmp(command[1], "uzi")==0 ){
-			weapon_give_uzi();
-		} else if( _stricmp(command[1], "ak47")==0 ){
-			weapon_give_ak47();
-		} else if( _stricmp(command[1], "commando")==0 ){
-			weapon_give_commando();
-		} else if( _stricmp(command[1], "lft")==0 ){
-			weapon_give_lft();
-		} else if( _stricmp(command[1], "flamethrower")==0 ){
-			weapon_give_flamethrower();
-		} else if( _stricmp(command[1], "molotov")==0 ){
-			weapon_give_molotov();
-		} else if( _stricmp(command[1], "signalpistol")==0 ){
-			weapon_give_signalpistol();
-		} else if( _stricmp(command[1], "launcher")==0 ){
-			weapon_give_launcher();
-		} else if( _stricmp(command[1], "grenade")==0 ){
-			weapon_give_grenade();
-		} else if( _stricmp(command[1], "c4")==0 ){
-			weapon_give_c4();
-		} else if( _stricmp(command[1], "mine")==0 ){
-			weapon_give_mine();
-		} else {
-			console_message(COMMAND_FAILED);
-		}
-	} else if( _stricmp(command[0], "set")==0 ){
-		if( _stricmp(command[1], "health")==0 ){
-			int i;
-			i = atoi(command[2] );
-			if( i > 100 ) i= 100;
-			if( i < 1 ) i = 1;
-			hero_hit_points = i;
-		} else if( _stricmp(command[1], "armor")==0 ){
-			int i;
-			i = atoi(command[2] );
-			if( i > 100 ) i= 100;
-			if( i < 0 ) i = 0;
-			hero_armor_points = i;
-		} else if( _stricmp(command[1], "gravity")==0 ){
-			float f;
-			sscanf(command[2], "%f", &f );
-			gravity = f;
-		} else if( _stricmp(command[1], "speed")==0 ){
-			float f;
-			sscanf(command[2], "%f", &f );
-			real_speed = f;
-		} else if( _stricmp(command[1], "jumpspeed")==0 ){
-			float f;
-			sscanf(command[2], "%f", &f );
-			PLAYER_JUMP_SPEED = f;
-		} else {
-			console_message(COMMAND_FAILED);
-		}
-	} else if( _stricmp(command[0], "clear")==0 ){
-		clear_console();
-	} else if( _stricmp(command[0], "exit")==0 ){
-		exit_application();
-	} else if( _stricmp(command[0], "new")==0 ){
-		new_game();
-	} else if( _stricmp(command[0], "save")==0 ){
-		int i;
-		i = atoi( command[1] );
-		if( i > 255 ) i= 255;
-		if( i < 0 ) i = 0;
-		save_game(i);
-	} else if( _stricmp(command[0], "load")==0 ){
-		int i;
-		i = atoi( command[1] );
-		if( i > 255 ) i= 255;
-		if( i < 0 ) i = 0;
-		load_game(i);
-	} else if( _stricmp(command[0], "cover")==0 ){
-		int i;
-		i = atoi( command[1] );
-		if( i < 0 ) i = 0;
-		if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
-		options.crosshairOver = i;
-	} else if( _stricmp(command[0], "cnormal")==0 ){
-		int i;
-		i = atoi( command[1] );
-		if( i < 0 ) i = 0;
-		if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
-		options.crosshairNormal = i;
-	} else if( _stricmp(command[0], "foggywater")==0 ){
-		options.fogInWater = !options.fogInWater;
-		console_message( options.fogInWater ? "Foggywater is on": "Foggywater is off" );
-	} else if( _stricmp(command[0], "clearscreen")==0 ){
-		options.clearScreen = !options.clearScreen;
-		console_message( options.clearScreen? "ClearScreen is on": "ClearScreen is off" );
-/*	} else if( _stricmp(command[0], "fov")==0 ){
-		float f;
-		if( _stricmp(command[1], "normal") == 0 )
-		{
-			f = fov;
-		}
-		else
-		{
-			sscanf(command[1], "%f", &f );
-		}
-		geCamera_SetAttributes(Camera, f, &Rect);
-	} else if( _stricmp(command[0], "timefx")==0 ){
-		if( _stricmp(command[1], "slowmotion") == 0 ){
-			float f; sscanf(command[2], "%f", &f );
-			timefx_slowmotion(f);
-		} else if( _stricmp(command[1], "drug") == 0 ){
-			float f; sscanf(command[2], "%f", &f );
-			timefx_drug(f);
-		} else if( _stricmp(command[1], "bite") == 0 ){
-			float f; sscanf(command[2], "%f", &f );
-			timefx_bite(f);
-		} else if( _stricmp(command[1], "normal") == 0 ){
-			timefx_normal();
-		} else {
-			console_message(COMMAND_FAILED);
-		}*/
-	} else if( _stricmp(command[0], "mousex")==0 ){
-		sscanf(command[1], "%f", &real_mouse_x_sensitivity);
-		mouse_x_sensitivity = real_mouse_x_sensitivity;
-	} else if( _stricmp(command[0], "mousey")==0 ){
-		sscanf(command[1], "%f", &real_mouse_y_sensitivity);
-		mouse_y_sensitivity = real_mouse_y_sensitivity;
-	} else if( _stricmp(command[0], "reportsense")==0 ){
-		char str[ 200];
-		sprintf(str, "mouse y: %f", real_mouse_y_sensitivity); console_message(str);
-		sprintf(str, "mouse x: %f", real_mouse_x_sensitivity); console_message(str);
-	} else if( _stricmp(command[0], "watermeter")==0 ){
-		sscanf(command[1], "%f", &(options.meterfog));
-	} else if( _stricmp(command[0], "consolemessage")==0 ){
-		console_message( command[1] );
-	} else if( _stricmp(command[0], "gamemessage")==0 ){
-		game_message( command[1] );
-	} else if( _stricmp(command[0], "systemmessage")==0 ){
-		system_message( command[1] );
-	} else if( _stricmp(command[0], "gplayso")==0 ){
-		char fileName[200];
-		sprintf(fileName, ".\\sfx\\%s", command[1]);
-		if(! soundsys_play_once_sound( fileName ) ){
-			char errorString[300];
-			sprintf(errorString, "Failed to play sound %s", fileName);
-			console_message(errorString);
-		}
-	} else if( _stricmp(command[0], "playso")==0 ){
-		char fileName[200];
-		sprintf(fileName, ".\\levels\\%s\\Sounds\\%s", getLevelFileName(), command[1]);
-		if(! soundsys_play_once_sound( fileName ) ){
-			char errorString[300];
-			sprintf(errorString, "Failed to play sound %s", fileName);
-			console_message(errorString);
-		}
-	} else if( _stricmp(command[0], "conv")==0 ){
-		// ( _stricmp(command[2],"true")==0 )?GE_TRUE:GE_FALSE
-		startConversation(getLevelFileName(), command[1], GE_FALSE);
-	} else if( _stricmp(command[0], "enable")==0 ){
-		enableByName(World, command[1]);
-	} else if( _stricmp(command[0], "disable")==0 ){
-		disableByName(World, command[1]);
-	} else if( command[0][0] == '#' ){
-		// dont do anything
-	} else if( _stricmp(command[0], "loose")==0 ){
-		if( _stricmp(command[1], "all")==0 ){
-			weapon_strip();
-		} else if( _stricmp(command[1], "knife")==0 ){
-			weapon_loose_knife();
-		} else if( _stricmp(command[1], "hammer")==0 ){
-			weapon_loose_hammer();
-		} else if( _stricmp(command[1], "axe")==0 ){
-			weapon_loose_axe();
-		} else if( _stricmp(command[1], "glock")==0 ){
-			weapon_loose_glock();
-		} else if( _stricmp(command[1], "deagle")==0 ){
-			weapon_loose_deagle();
-		} else if( _stricmp(command[1], "tazer")==0 ){
-			weapon_loose_tazer();
-		} else if( _stricmp(command[1], "tranqualizer")==0 ){
-			weapon_loose_tranqualizer();
-		} else if( _stricmp(command[1], "shotgun")==0 ){
-			weapon_loose_shotgun();
-		} else if( _stricmp(command[1], "mag7")==0 ){
-			weapon_loose_mag7();
-		} else if( _stricmp(command[1], "sniper")==0 ){
-			weapon_loose_sniper();
-		} else if( _stricmp(command[1], "barret")==0 ){
-			weapon_loose_barret();
-		} else if( _stricmp(command[1], "smg")==0 ){
-			weapon_loose_smg();
-		} else if( _stricmp(command[1], "uzi")==0 ){
-			weapon_loose_uzi();
-		} else if( _stricmp(command[1], "ak47")==0 ){
-			weapon_loose_ak47();
-		} else if( _stricmp(command[1], "commando")==0 ){
-			weapon_loose_commando();
-		} else if( _stricmp(command[1], "lft")==0 ){
-			weapon_loose_lft();
-		} else if( _stricmp(command[1], "flamethrower")==0 ){
-			weapon_loose_flamethrower();
-		} else if( _stricmp(command[1], "molotov")==0 ){
-			weapon_loose_molotov();
-		} else if( _stricmp(command[1], "signalpistol")==0 ){
-			weapon_loose_signalpistol();
-		} else if( _stricmp(command[1], "launcher")==0 ){
-			weapon_loose_launcher();
-		} else if( _stricmp(command[1], "grenade")==0 ){
-			weapon_loose_grenade();
-		} else if( _stricmp(command[1], "c4")==0 ){
-			weapon_loose_c4();
-		} else if( _stricmp(command[1], "mine")==0 ){
-			weapon_loose_mine();
-		} else {
-			console_message(COMMAND_FAILED);
-		}
-	} else if( _stricmp(command[0], "script")==0 ){
-		//FILE *f=0;
-		if( command[1][0] != 0 )
-		{
-			execute_scriptFile( command[1] );
-		}
-		else
-		{
-			console_message("Second parameter should be a script file to execute");
-		}
-	} else if( _stricmp(command[0], "lua")==0 ){
-		if( command[1][0] != 0 )
-		{
-			if(! inf_luafile( command[1] ) ){
-				char str[200];
-				sprintf(str, "Failed to execute lua file: %s", command[1]);
-				console_message(str);
-			}
-		}
-		else
-		{
-			console_message("Second parameter should be a lua-script file to execute");
-		}
-	} else if( _stricmp(command[0], "luas")==0 ){
-		if( command[1][0] != 0 )
-		{
-			if(! inf_luacommand( command[1] ) ){
-				char str[200];
-				sprintf(str, "Failed to execute lua command: %s", command[1]);
-				console_message(str);
-			}
-		}
-		else
-		{
-			console_message("Second parameter should be a lua-script file to execute");
-		}
-	} else {
-		console_message(COMMAND_FAILED);
+		loadLevel = 0;
 	}
+}
+
+LUA_FUNC(loadLevel) {
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	strcpy(levelToLoad, lua_tostring(luaVM, -1));
+	loadLevel = 1;
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(weaponname){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.doPrint = !cheats.doPrint;
+	console_message( cheats.doPrint ? "WeaponName is on": "WeaponName is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(bouncy){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.bouncy = !cheats.bouncy;
+	console_message( cheats.bouncy? "Bouncy mode is on": "Bouncy mode is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(bbox){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.bbox = !cheats.bbox;
+	console_message( cheats.bbox? "BBox mode is on": "BBox mode is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(textureprint){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.texturePrint = !cheats.texturePrint;
+	console_message( cheats.texturePrint ? "texturePrint is on": "texturePrint is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(movie){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 3 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	if( movie_execute(lua_tostring(luaVM, -3), lua_tostring(luaVM, -2), (float) lua_tonumber(luaVM, -1)) ) {
+		console_message("movie ok");
+		lua_pushnumber(luaVM, 1);
+	}
+	else {
+		console_message("movie failed, check log");
+		lua_pushnumber(luaVM, 0);
+	}
+	
+	return 1;
+}
+
+LUA_FUNC(timeout){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 2 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	timeout_add((float) lua_tonumber(luaVM, -1), lua_tostring(luaVM, -2));
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(weaponflash){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	options.weaponFlash = !options.weaponFlash;
+	// EPILEPSY
+	if( options.weaponFlash )
+		console_message("WARNING: USING THIS MODE MAY CAUSE EPILEPTIC SEIZURES, USE IT ON YOUR OWN RISK");
+	console_message( options.weaponFlash ? "WeaponFlash is on": "WeaponFlash is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(god){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.god = !cheats.god;
+	console_message( cheats.god ? "God is on": "God is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(ammoking){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.unlimited_ammo = !cheats.unlimited_ammo;
+	console_message( cheats.unlimited_ammo ? "AmmoKing is on": "AmmoKing is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(magtotheteeth){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.unlimited_mag = !cheats.unlimited_mag;
+	console_message( cheats.unlimited_mag ? "You got magazines to the teeth": "You lost your precios magazines" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(ghost){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.ghost = !cheats.ghost;
+	console_message( cheats.ghost ? "Ghost is on": "Ghost is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(fps){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.printFps = !cheats.printFps;
+	console_message( cheats.printFps ? "FPS is on": "FPS is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(debug){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.debug = !cheats.debug;
+	console_message( cheats.debug ? "Debug is on": "Debug is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(log){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	printLog(lua_tostring(luaVM, -1) );
+	printLog("\n");
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(materialprint){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	cheats.materialPrint = !cheats.materialPrint;
+	console_message( cheats.materialPrint ? "materialPrint is on": "materialPrint is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveAll){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	console_message("You got evrything you was supposed to have");
+	weapon_give_all();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveDrug){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	timedamage_add(TIMEDAMAGE_DRUG, 5);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveFire){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	timedamage_add(TIMEDAMAGE_FIRE, 5);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveBite){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	timedamage_add(TIMEDAMAGE_INFECTED, 5);
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveDamage){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	
+	i = (int) lua_tonumber(luaVM, -1);
+	if( i > 255 ) i= 255;
+	if( i < 0 ) i = 0;
+	damage(i);
+	
+	lua_pushnumber(luaVM, i);
+	return 1;
+}
+
+LUA_FUNC(giveXdamage){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	i = (int)lua_tonumber(luaVM, -1);
+	if( i > 255 ) i= 255;
+	if( i < 0 ) i = 0;
+	armor_piercing_damage(i);
+	
+	lua_pushnumber(luaVM, i);
+	return 1;
+}
+
+LUA_FUNC(giveKnife){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_knife();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveGlock){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_glock(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveDeagle ){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_deagle(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveShotgun){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_shotgun(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveSniper){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_sniper(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveSmg){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_smg(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveUzi){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_uzi(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveLft){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_lft(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveMolotov){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_molotov(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveGrenade){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_grenade(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(giveMinirocket){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_give_minirocket(2);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(setHealth){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	i = (int) lua_tonumber(luaVM, -1);
+	if( i > 100 ) i= 100;
+	if( i < 1 ) i = 1;
+	hero_hit_points = i;
+	
+	lua_pushnumber(luaVM, i);
+	return 1; 
+}
+
+LUA_FUNC(setArmor){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	i = (int) lua_tonumber(luaVM, -1);
+	if( i > 100 ) i= 100;
+	if( i < 0 ) i = 0;
+	hero_armor_points = i;
+	
+	lua_pushnumber(luaVM, i);
+	return 1;
+}
+
+LUA_FUNC(setGravity){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	gravity = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(setSpeed){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	real_speed = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(setJumpspeed){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	PLAYER_JUMP_SPEED = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(clear){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	clear_console();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(cover){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	i = (int) lua_tonumber(luaVM, -1);
+	if( i < 0 ) i = 0;
+	if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
+	options.crosshairOver = i;
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(cnormal){
+	int args;
+	int i;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	i = (int) lua_tonumber(luaVM, -1);
+	if( i < 0 ) i = 0;
+	if( i > NUM_CROSSHAIRS-1 ) i = NUM_CROSSHAIRS-1;
+	options.crosshairNormal = i;
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(foggywater){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	options.fogInWater = !options.fogInWater;
+	console_message( options.fogInWater ? "Foggywater is on": "Foggywater is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(clearscreen){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	options.clearScreen = !options.clearScreen;
+	console_message( options.clearScreen? "ClearScreen is on": "ClearScreen is off" );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(mousex) {
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	mouse_x_sensitivity = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(mousey){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	mouse_y_sensitivity = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+} 
+
+LUA_FUNC(reportsense){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	
+	{
+	char str[ 200];
+	sprintf(str, "mouse y: %f", real_mouse_y_sensitivity); console_message(str);
+	sprintf(str, "mouse x: %f", real_mouse_x_sensitivity); console_message(str);
+	}
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(watermeter){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	options.meterfog = (float) lua_tonumber(luaVM, -1);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(consolemessage){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	console_message( lua_tostring(luaVM, -1) );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(gamemessage){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	game_message( lua_tostring(luaVM, -1) );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(systemmessage){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	system_message( lua_tostring(luaVM, -1) );
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(gplayso){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	{
+		char fileName[200];
+		sprintf(fileName, ".\\sfx\\%s", lua_tostring(luaVM, -1));
+		if(! soundsys_play_once_sound( fileName ) ){
+			char errorString[300];
+			sprintf(errorString, "Failed to play sound %s", fileName);
+			console_message(errorString);
+			lua_pushnumber(luaVM, 0);
+		}
+		else {
+			lua_pushnumber(luaVM, 1);
+		}
+	}
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(playso2d){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	{
+		char fileName[200];
+		sprintf(fileName, ".\\levels\\%s\\Sounds\\%s", getLevelFileName(), lua_tostring(luaVM, -1) );
+		if(! soundsys_play_once_sound( fileName ) ){
+			char errorString[300];
+			sprintf(errorString, "Failed to play sound %s", fileName);
+			console_message(errorString);
+			lua_pushnumber(luaVM, 0);
+		}
+		else {
+			lua_pushnumber(luaVM, 1);
+		}
+	}
+	return 1;
+}
+
+LUA_FUNC(playso3d){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 3 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	{
+		char fileName[200];
+		geVec3d* location;
+		float min = (float) lua_tonumber(luaVM, -2);
+		sprintf(fileName, ".\\levels\\%s\\Sounds\\%s", getLevelFileName(), lua_tostring(luaVM, -3));
+		location = findLocationByName(World, lua_tostring(luaVM, -1));
+		
+		if(! soundsys_play_once_3dsound(fileName, location, min, GE_FALSE) ){
+			char errorString[300];
+			sprintf(errorString, "Failed to play sound %s", fileName);
+			console_message(errorString);
+			lua_pushnumber(luaVM, 0);
+		}
+		else {
+			lua_pushnumber(luaVM, 1);
+		}
+	}
+	return 1;
+} 
+
+LUA_FUNC(splay){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	{
+	char fileName[200];
+	sprintf(fileName, ".\\levels\\%s\\Songs\\%s", getLevelFileName(), lua_tostring(luaVM, -1));
+	if( soundsys_playMusic(fileName) )
+		lua_pushnumber(luaVM, 1);
+	else 
+		lua_pushnumber(luaVM, 0);
+	}
+	return 1;
+}
+
+LUA_FUNC(schange){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	{
+	char fileName[200];
+	sprintf(fileName, ".\\levels\\%s\\Songs\\%s", getLevelFileName(), lua_tostring(luaVM, -1));
+	if( soundsys_changeMusic(fileName) )
+		lua_pushnumber(luaVM, 1);
+	else
+		lua_pushnumber(luaVM, 0);
+	}
+	return 1;
+}
+
+LUA_FUNC(sstop){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	soundsys_stopMusic();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(conv){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	startConversation(getLevelFileName(), lua_tostring(luaVM, -1), GE_FALSE);
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(enable){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	enableByName(World, lua_tostring(luaVM, -1));
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(disable){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 1 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+	
+	// call function
+	disableByName(World, lua_tostring(luaVM, -1));
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseKnife){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_knife();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseGlock){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_glock();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseDeagle){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_deagle();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseShotgun){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_shotgun();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseSniper){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_sniper();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseSmg){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_smg();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseUzi){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_uzi();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseLft){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+
+	weapon_loose_lft();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseMolotov){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_molotov();
+	
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseGrenade){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_grenade();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+LUA_FUNC(looseMinirocket){
+	int args;
+	if( (args = lua_gettop(luaVM)) != 0 ){
+		for(;args>0; args--)
+			lua_tostring(luaVM, -1);
+		// todo
+		lua_error(luaVM);
+		return 0;
+	}
+
+	weapon_loose_minirocket();
+
+	lua_pushnumber(luaVM, 1);
+	return 1;
+}
+
+void console_initLua() {
+	// good thing there are such cool stuff as macros
+	LOAD_FUNC(loadLevel);
+	LOAD_FUNC(weaponname);
+	LOAD_FUNC(bouncy);
+	LOAD_FUNC(bbox);
+	LOAD_FUNC(textureprint);
+	LOAD_FUNC(movie);
+	LOAD_FUNC(timeout);
+	LOAD_FUNC(weaponflash);
+	LOAD_FUNC(god);
+	LOAD_FUNC(ammoking);
+	LOAD_FUNC(magtotheteeth);
+	LOAD_FUNC(ghost);
+	LOAD_FUNC(fps);
+	LOAD_FUNC(debug);
+	LOAD_FUNC(log);
+	LOAD_FUNC(materialprint);
+	LOAD_FUNC(giveAll);
+	LOAD_FUNC(giveDrug);
+	LOAD_FUNC(giveFire);
+	LOAD_FUNC(giveBite);
+	LOAD_FUNC(giveDamage);
+	LOAD_FUNC(giveXdamage);
+	LOAD_FUNC(giveKnife);
+	LOAD_FUNC(giveGlock);
+	LOAD_FUNC(giveDeagle);
+	LOAD_FUNC(giveShotgun);
+	LOAD_FUNC(giveSniper);
+	LOAD_FUNC(giveSmg);
+	LOAD_FUNC(giveUzi);
+	LOAD_FUNC(giveLft);
+	LOAD_FUNC(giveMolotov);
+	LOAD_FUNC(giveGrenade);
+	LOAD_FUNC(giveMinirocket);
+	LOAD_FUNC(setHealth);
+	LOAD_FUNC(setArmor);
+	LOAD_FUNC(setGravity);
+	LOAD_FUNC(setSpeed);
+	LOAD_FUNC(setJumpspeed);
+	LOAD_FUNC(clear);
+	LOAD_FUNC(cover);
+	LOAD_FUNC(cnormal);
+	LOAD_FUNC(foggywater);
+	LOAD_FUNC(clearscreen);
+	LOAD_FUNC(mousex) ;
+	LOAD_FUNC(mousey);
+	LOAD_FUNC(reportsense);
+	LOAD_FUNC(watermeter);
+	LOAD_FUNC(consolemessage);
+	LOAD_FUNC(gamemessage);
+	LOAD_FUNC(systemmessage);
+	LOAD_FUNC(gplayso);
+	LOAD_FUNC(playso2d);
+	LOAD_FUNC(playso3d);
+	LOAD_FUNC(splay);
+	LOAD_FUNC(schange);
+	LOAD_FUNC(sstop);
+	LOAD_FUNC(conv);
+	LOAD_FUNC(enable);
+	LOAD_FUNC(disable);
+	LOAD_FUNC(looseKnife);
+	LOAD_FUNC(looseGlock);
+	LOAD_FUNC(looseDeagle);
+	LOAD_FUNC(looseShotgun);
+	LOAD_FUNC(looseSniper);
+	LOAD_FUNC(looseSmg);
+	LOAD_FUNC(looseUzi);
+	LOAD_FUNC(looseLft);
+	LOAD_FUNC(looseMolotov);
+	LOAD_FUNC(looseGrenade);
+	LOAD_FUNC(looseMinirocket);
 }

@@ -4,6 +4,10 @@
 #include "globalGenesis.h"
 #include "xtra_g3d.h"
 #include "player.h"
+#include "inf_message_system.h"
+#include "pickup.h"
+#include "fromto.h"
+
 
 //if context is zero then the move is the player and the actor can be picked up
 // if context is one then the move is not the player and it's someting other
@@ -14,6 +18,12 @@ geBoolean cb_move(geWorld_Model* Model, geActor* Actor, void * Context)
 	// this should be updated to give more scheck
 	if( Actor )
 	{
+		if( Context ){
+			FromTo* ft = (FromTo*) Context;
+			if( pickup_handleActor(Actor, World, &(ft->from), &(ft->to)) )
+				return GE_FALSE;
+		}
+
 		// if the actor is dead we can move through it, if it's alive we can't
 		return enemy_isAlive(Actor);
 	}
@@ -37,7 +47,7 @@ void kill_fog()
 }
 
 // NOTE: start David Wulff
-geBoolean is_string_null(char *String )
+geBoolean is_string_null(const char *String )
 {
 
 	// first way

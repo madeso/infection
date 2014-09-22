@@ -12,12 +12,12 @@ void HT_Destroy(HashTable* table);
 
 #define HT_DESTROY(a)	{ HT_Destroy(a); a=0; }
 
-void HT_Add(HashTable *table, int data, char* key);
-int HT_Load(HashTable *table, char* fileName);
+void HT_Add(HashTable *table, int data, const char* key);
+int HT_Load(HashTable *table, const char* fileName);
 
-int HT_Find(HashTable *table, char* key, int* data);
+int HT_Find(HashTable *table, const char* key, int* data);
 
-void HT_Remove(HashTable *table, char* key);
+void HT_Remove(HashTable *table, const char* key);
 void HT_Clear(HashTable *table);
 
 #endif

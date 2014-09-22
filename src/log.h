@@ -11,12 +11,12 @@ Logging is good, here is functions that takes care of that.
 char str[STRING_LENGTH];
 
 void startLog();//Initiate the log file
-void printLog(char *c);//print to log file
-void printExtended(char* sz);// calls printLog if debug is aviable
-void error(char* info);// reports an error
-void errorx(char* info, char* reason);// reports an error
+void printLog(const char *c);//print to log file
+void printExtended(const char* sz);// calls printLog if debug is aviable
+void error(const char* info);// reports an error
+void errorx(const char* info, const char* reason);// reports an error
 
-void cerror(char* info);// reports an error
-void cerrorx(char* info, char* reason);// reports an error
+void cerror(const char* info);// reports an error
+void cerrorx(const char* info, const char* reason);// reports an error
 
 #endif

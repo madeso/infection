@@ -22,7 +22,7 @@ geBoolean FindDriver();
 geBoolean LoadPrefs(char *drv, int *width, int *height, char* fullscreen, Options *options);
 
 //Loads up a level
-geBoolean LoadLevel(char *Filename, int fromLoad);
+geBoolean LoadLevel(const char *Filename, int fromLoad);
 
 //Free up all memory, and close file pointer.
 void ShutDown();
@@ -34,4 +34,9 @@ geBoolean SavePrefs();
 char* getLevelFileName();
 
 int handle_Level(SaveFile* file);
+
+void LeaveLevel();
+
+// implemented in main.c
+void timing_reset();
 #endif

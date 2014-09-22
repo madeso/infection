@@ -2,7 +2,7 @@
 #define __SAVE_FILE_H
 
 typedef struct SSaveFile SaveFile;
-SaveFile* sf_open(char* fileName, char* application, unsigned int saveVersion, char* key, int save);
+SaveFile* sf_open(const char* fileName, char* application, unsigned int saveVersion, char* key, int save);
 int sf_handleInteger(SaveFile* file, int* i);
 int sf_handleString(SaveFile* file, char* string);
 int sf_handleFloat(SaveFile* file, float* f);

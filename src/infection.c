@@ -34,7 +34,7 @@ void add_blueFlash(float power){
 	blueFlashState += power;
 	maxBlueFlashState += power;
 }
-void renderFlash(){
+void renderFlash(){/*
 	GE_RGBA rgba;
 	if( redFlashState > 0.0f){
 		rgba.r = 255.0f;
@@ -49,7 +49,7 @@ void renderFlash(){
 		rgba.b = 255.0f;
 		rgba.a = blueFlashState / maxBlueFlashState * 255.0f;
 		geEngine_FillRect(Engine, &Rect, &rgba);
-	}
+	}*/
 }
 void iterateFlash(){
 	if( redFlashState > 0.0f ){
@@ -75,7 +75,7 @@ void initFlash(){
 
 void new_game()
 {
-	setPlayerName("player1");
+//	setPlayerName("player1");
 	weapon_strip(); // no weapons on a new game
 	hero_hit_points = 100; // full health
 	hero_armor_points = 0; // no armor at the beginning
@@ -111,6 +111,10 @@ char* getPlayerDirectory(){
 	sprintf(playerSavePath, ".\\players\\%s", glPlayerName);
 	return playerSavePath;
 }
+char* getPlayerName(){
+	return glPlayerName;
+}
+
 
 void setPlayerName(char *playerName){
 	strcpy(glPlayerName, playerName);
@@ -188,6 +192,22 @@ void do_load(char* fileName){
 	}
 
 	DecalMgr_Clear(dMgr);
+
+	XForm.Translation = Pos;
+}
+
+// ok to save at
+char test_saveIndex(int index){
+	char temp[200];
+	FILE* f =0;
+	sprintf(temp, "%s\\save%i.sav", getPlayerDirectory(), index);
+	f = fopen(temp, "rb");
+	if( f ){
+		// the file exist
+		fclose(f);
+		return 0; // not ok to save
+	}
+	return 1; // yep it's ok to save
 }
 
 void save_game(int index)
@@ -228,15 +248,15 @@ void level_load(){
 	do_load(temp);*/
 }
 
-geVec3d* findLocationByName(geWorld* world, char* name){
+geVec3d* findLocationByName(geWorld* world, const char* name){
 	return findPositionByName(world, name);
 	// this one will call other functions like find enemy positions
 	// and find boxes and such things.
 }
 
-void enableByName(geWorld* world, char* name){
+void enableByName(geWorld* world, const char* name){
 	entity_enableByName(world, name);
 }
-void disableByName(geWorld* world, char* name){
+void disableByName(geWorld* world, const char* name){
 	entity_disableByName(world, name);
 }

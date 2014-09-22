@@ -4,6 +4,7 @@
 #include "enemies.h"
 #include "globalGenesis.h"
 #include "sound_modder.h"
+#include "time_damage.h"
 
 int explosion_getDamage(geVec3d* explosionLocation, geVec3d* pos, float range, int damage){
 	geVec3d temp;
@@ -30,4 +31,9 @@ void explosion_at(geVec3d* location, float range, int pdamage){
 		float val = (float)(100-killSound) / 100.0f;
 		sm_set( val );
 	}
+}
+
+void fire_explosion_at(geVec3d* location, float range, int pdamage){
+	enemy_fireExplosionDamage(location, range, pdamage);
+	timedamage_add(TIMEDAMAGE_FIRE, explosion_getDamage(location, &(XForm.Translation),range, pdamage ) );
 }

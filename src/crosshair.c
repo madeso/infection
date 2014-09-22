@@ -77,6 +77,7 @@ geBoolean DrawCrossHair()
 	y = (Height - geBitmap_Height(CrossHair[currentCrosshair]))/2;
 
 	//NULL says that we want to render the whole bitmap
+	// @@@todo@@@ fix faster rendering
 	if( !geEngine_DrawBitmap(Engine, CrossHair[currentCrosshair], NULL, x, y) )
 	{
 		printLog("Failed to draw crosshair.\n");

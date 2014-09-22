@@ -114,7 +114,7 @@ int md5checkFile(FILE* file){
 	return 1;
 }
 
-SaveFile* sf_open(char* fileName, char* application, unsigned int saveVersion, char* key, int save){
+SaveFile* sf_open(const char* fileName, char* application, unsigned int saveVersion, char* key, int save){
 	SaveFile *sf = 0;
 	int res=0;
 	char string[200];

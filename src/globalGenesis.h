@@ -9,13 +9,14 @@ Global genesis variables, and a convinient function that takes a screenshot
 
 #include <windows.h>
 #include "genesis.h"
-
+#include "xfont.h"
 
 geEngine *Engine;//The engine
 HWND hWnd;//The window handle
 geCamera *Camera;//the camera, where you see from, and the fov
 GE_Rect Rect;//Size of the camera
 geFloat fov;//your fov
+XFontMgr* fntMgr;
 
 int run;//are we still in play
 geBoolean keys[258];//temporary variable that will hold keys if they are pressed
@@ -100,5 +101,7 @@ char fullscreen; // 1 if fullscreen 0 if not
 unsigned int shotIndex;
 //does a screenshot and aves it to an file
 geBoolean screenshot();
+
+GE_RGBA colorDebug;
 
 #endif

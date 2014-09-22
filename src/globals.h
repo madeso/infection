@@ -18,12 +18,11 @@ Some global functions that everybody could use
 #include "genesis.h"
 #include "hash_table.h"
 //Includes
-
 // move callback function, evry one should use this when moving - we dont want dead bodies to stop us when we are walking
 geBoolean cb_move(geWorld_Model* Model, geActor* Actor, void * Context);
 void set_fog(float r, float g, float b, float meters, int fog); // creates a fog
 void kill_fog(); // kills the fog
-geBoolean is_string_null(char *String ); // returns GE_TRUE if the string is considered null, GE_FALSE otherwise
+geBoolean is_string_null(const char *String ); // returns GE_TRUE if the string is considered null, GE_FALSE otherwise
 
 int getMaterial(GE_Collision* lCol);
 

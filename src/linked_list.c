@@ -3,8 +3,7 @@
 #include "stdlib.h"
 #include "string.h"
 #include "stdio.h"
-
-#define STRING_LENGTH 80
+#include "log.h"
 
 typedef struct _LinkedListNode LinkedListNode;
 
@@ -34,7 +33,7 @@ void LL_Destroy(LinkedList* list){
 	}
 }
 
-void LL_Add(LinkedList *list, int data, char* key){
+void LL_Add(LinkedList *list, int data, const char* key){
 	LinkedListNode* node;
 	if( LL_Find(list, key, 0) ){
 		printLog("Linked list has already inserted that key\n");
@@ -70,7 +69,7 @@ void LL_Add(LinkedList *list, int data, char* key){
 	}
 }
 
-int LL_Load(LinkedList *list, char* fileName){
+int LL_Load(LinkedList *list, const char* fileName){
 	FILE* f=0;
 	char key[STRING_LENGTH];
 	int data;
@@ -97,7 +96,7 @@ int LL_Load(LinkedList *list, char* fileName){
 	return 1;
 }
 
-int LL_Find(LinkedList *list, char* key, int* data){
+int LL_Find(LinkedList *list, const char* key, int* data){
 	LinkedListNode* node;
 
 	node = list->first;
@@ -112,7 +111,7 @@ int LL_Find(LinkedList *list, char* key, int* data){
 	return 0;
 }
 
-void LL_Remove(LinkedList *list, char* key){
+void LL_Remove(LinkedList *list, const char* key){
 	LinkedListNode *node= list->first;
 
 	if( list->first ){

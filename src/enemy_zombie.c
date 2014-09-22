@@ -17,14 +17,18 @@
 #include "sound_system.h"
 #include "explosions.h"
 #include "useful_macros.h"
+#include "inf_message_system.h"
+#include "infection.h" // hande_Vector function
+#include "fxbitmaps.h" // BloodExplosion function
+#include "console.h"
 
 #define UPDATE_CLOSEST			getClosestPosition( z->XForm, MONSTER_FLAGS_OF_ZOMBIE, z->closest )
 #define CAN_SEE_ENEMY			z->closest->used
 #define FIFTY_PERCENTS_CHANCE	rand()%2 == 0
 #define IN_RANGE_OF_ENEMY		(z->closest->distance < ZOMBE_SLASH_RANGE_SQ && z->closest->used)
 
-soundsys_sound zombie_damage[3];
-soundsys_sound zombie_attack[6];
+soundsys_sound zombie_damage[6];
+soundsys_sound zombie_attack[3];
 soundsys_sound zombie_idle[4];
 
 geMotion			*ZombieIdle=0;
@@ -59,19 +63,38 @@ void enemy_zombie_statePrint(Inf_Enemy_Zombie* zombie){
 	game_message(str);
 }
 
+void enemy_zombie_setHealth(Inf_Enemy_Zombie* zombie){
+	switch(zombie->Type){
+	case 1: // weak
+		zombie->Health = 50;
+		break;
+	case 2: // standard
+		zombie->Health = 100;
+		break;
+	case 3: // tough
+		zombie->Health = 200;
+		break;
+	default:
+		zombie->Type = (rand()%3) + 1;
+		enemy_zombie_setHealth(zombie);
+		break;
+	}
+}
+zombie_setHealth(z);
+
 void zombie_sayDamage(Inf_Enemy_Zombie* zombie){
 	if( rand()%5 == 0 ) return;
-	soundsys_play3dsound( &(zombie_damage[rand()%3]) , &(zombie->Position), 5.0f, GE_FALSE);
+	soundsys_play3dsound( &(zombie_damage[rand()%6]) , &(zombie->Position), 5.0f, GE_FALSE, GE_FALSE);
 }
 void zombie_sayAttack(Inf_Enemy_Zombie* zombie, char doit){
 	if( !doit ) {
 		if( rand()%4 == 0 ) return;
 	}
-	soundsys_play3dsound( &(zombie_attack[rand()%6]) , &(zombie->Position), 5.0f, GE_FALSE);
+	soundsys_play3dsound( &(zombie_attack[rand()%3]) , &(zombie->Position), 5.0f, GE_FALSE, GE_FALSE);
 }
 void zombie_sayIdle(Inf_Enemy_Zombie* zombie){
 	if( rand()%4 == 0 ) return;
-	soundsys_play3dsound( &(zombie_idle[rand()%4]) , &(zombie->Position), 5.0f, GE_TRUE);
+	soundsys_play3dsound( &(zombie_idle[rand()%4]) , &(zombie->Position), 5.0f, GE_TRUE, GE_FALSE);
 }
 
 void enemy_zombie_doDamage(Inf_Enemy_Zombie* z, char type, int damage, geVec3d* damageLocation){
@@ -82,15 +105,22 @@ void enemy_zombie_doDamage(Inf_Enemy_Zombie* z, char type, int damage, geVec3d* 
 	BloodExplosion( *damageLocation );
 	if( z->Health <= 0 ) return;
 	zombie_sayDamage(z);
+	talkPower_Change( damage/10.0f );
 	if( type == DAMAGE_NORMAL ){
 		z->Health -= damage;
 	} else if( type == DAMAGE_ELECTRICAL ) {
 		z->state = ZOMBIE_STATE_ELECTRICAL;
 	}
-	if( z->state != ZOMBIE_STATE_ELECTRICAL ){
+	else if( type == DAMAGE_FIRE ) {
+		// temporary
+		//z->Health -= damage;
+		z->burningTime = 0.0f;
+		z->burningDamage += damage;
+	}
+	/*if( z->state != ZOMBIE_STATE_ELECTRICAL ){
 		z->state = ZOMBIE_STATE_DAMAGE;
 		z->counter = 0.0f;
-	}
+	}*/
 	if( z->Health <= 0 ){
 		z->Health = 0;
 		z->counter = 0.0f;
@@ -109,10 +139,12 @@ void enemy_zombie_doDamage(Inf_Enemy_Zombie* z, char type, int damage, geVec3d* 
 // may change state to eating
 void enemy_zombie_attack(Inf_Enemy_Zombie* z){
 	geVec3d to;
+	geVec3d from;
 	geXForm3d_GetIn(z->XForm, &to);
-	geVec3d_AddScaled(&(z->Position),&to, ZOMBE_SLASH_RANGE, &to);
-	// remember: if the actor is null, we are kicking the player
-	enemy_damage(z->closest->actor, 10 + rand() % 10, DAMAGE_NORMAL, z->Position, to);
+	from = z->Position;
+	geVec3d_AddScaled(&from,&to, ZOMBE_SLASH_RANGE, &to);
+	// remember: if the actor is null, we are kicking the player's ass
+	enemy_damage(z->closest->actor, 10 + rand() % 10, DAMAGE_ZOMBIE, 0, from, to);
 
 	if(! enemy_isAlive(z->closest->actor) ){
 		UPDATE_CLOSEST;
@@ -142,12 +174,13 @@ int handle_zombie_enemy(SaveFile* file, geWorld* world){
 		
 		INT( r->state, "Failed to handle zombie state");
 		INT( r->Health, "Failed to handle zombie health");
+		INT( r->Type, "Failed to handle zombie type");
 		INT( r->Resurections, "Failed to handle zombie resurection");
 		FLOAT( r->counter, "Failed to handle zombie counter");
 		VECTOR( r->Position, "Failed to handle zombie position");
 		VECTOR( r->Orientation, "Failed to handle zombie orientation");
 		INT( r->closest->used , "Failed to handle zombie monster used");
-		VECTORPTR( r->closest->position, "Failed to handle zombie monster position" );
+		VECTORPTR( &(r->closest->position) , "Failed to handle zombie monster position" );
 		FLOAT( r->closest->distance, "Failed to handle zombie monster distance");
 
 		// get next entity
@@ -168,6 +201,20 @@ void zombie_applyAndEvaluateZombieState(Inf_Enemy_Zombie* z, float time){
 
 	//////////////////////////////////////////////////
 	// state evaluate
+
+	// damage evaluate
+	if( z->burningDamage > 0 ) {
+		z->burningTime -= TIME;
+		if( z->burningTime <= 0.0f ) {
+			geVec3d fire = z->Position;
+			fire.Y += 30.0f;
+			z->burningDamage -= 1;
+			z->burningTime = 0.25f;
+			enemy_zombie_doDamage(z, DAMAGE_NORMAL, 5, 0);
+			fx_fire(&fire, GE_FALSE, 0.50f);
+		}
+	}
+
 	switch( z->state ){
 	case ZOMBIE_STATE_DEAD:
 		geActor_SetPose(z->Actor, ZombieDie, z->counter, z->XForm );
@@ -181,7 +228,7 @@ void zombie_applyAndEvaluateZombieState(Inf_Enemy_Zombie* z, float time){
 			z->counter = 0.0f;
 			z->state = ZOMBIE_STATE_IDLE;
 			zombie_sayIdle(z);
-			z->Health = 100;
+			enemy_zombie_setHealth(z);
 		}
 		break;
 	case ZOMBIE_STATE_DIE:
@@ -194,7 +241,7 @@ void zombie_applyAndEvaluateZombieState(Inf_Enemy_Zombie* z, float time){
 		}
 		if( z->counter > 5.0f ){
 			z->state = ZOMBIE_STATE_WAITING_FOR_RESURECTION;
-			z->counter = RAND_FLOAT() * 30.0f;
+			z->counter = RAND_FLOAT() * 10.0f;
 		}
 		break;
     case ZOMBIE_STATE_WAITING_FOR_RESURECTION:
@@ -351,21 +398,21 @@ void zombie_applyAndEvaluateZombieState(Inf_Enemy_Zombie* z, float time){
 }
 
 void enemy_zombie_init(){
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\damage0.wav", &(zombie_damage[0]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\damage1.wav", &(zombie_damage[1]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\damage2.wav", &(zombie_damage[2]));
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage0.wav", 1, &(zombie_damage[0]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage1.wav", 1, &(zombie_damage[1]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage2.wav", 1, &(zombie_damage[2]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage3.wav", 1, &(zombie_damage[3]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage4.wav", 1, &(zombie_damage[4]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\damage5.wav", 1, &(zombie_damage[5]), 1, TYPE_3D);
 
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack0.wav", &(zombie_attack[0]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack1.wav", &(zombie_attack[1]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack2.wav", &(zombie_attack[2]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack3.wav", &(zombie_attack[3]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack4.wav", &(zombie_attack[4]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\attack5.wav", &(zombie_attack[5]));
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\attack0.wav", 1, &(zombie_attack[0]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\attack1.wav", 1, &(zombie_attack[1]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\attack2.wav", 1, &(zombie_attack[2]), 1, TYPE_3D);
 
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\idle0.wav", &(zombie_idle[0]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\idle1.wav", &(zombie_idle[1]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\idle2.wav", &(zombie_idle[2]));
-	soundsys_loadWaw(".\\sfx\\enemies\\zombie\\idle3.wav", &(zombie_idle[3]));
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\idle0.wav", 1, &(zombie_idle[0]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\idle1.wav", 1, &(zombie_idle[1]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\idle2.wav", 1, &(zombie_idle[2]), 1, TYPE_3D);
+	soundsys_loadSound(".\\sfx\\enemies\\zombie\\idle3.wav", 1, &(zombie_idle[3]), 1, TYPE_3D);
 
 	ZombieIdle = geActor_GetMotionByName(enemy_zombie_def, "Idle" );
 	ZombieWalk = geActor_GetMotionByName(enemy_zombie_def, "Walk" );
@@ -383,7 +430,7 @@ void apply_zombies(geWorld* world){
 	Set = geWorld_GetEntitySet(World, "Inf_Enemy_Zombie");
 	if (Set == NULL) return;
 	
-	// get first rain entity
+	// get first entity
 	Entity = geEntity_EntitySetGetNextEntity(Set, NULL);
 
 	// wade thru them all
@@ -465,14 +512,19 @@ void enemy_zombie_newWorld(geWorld* World){
 		geXForm3d_RotateY(z->XForm, z->Orientation.Y );
 		geXForm3d_RotateZ(z->XForm, z->Orientation.Z );
 		z->XForm->Translation = z->Position;
+		z->burningDamage = 0;
+		z->burningTime = 0.0f;
 
-		z->Actor = LoadActor(enemy_zombie_def, World, 2.0f, GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE, z->XForm);
-
-		if( !z ) {
+		z->Actor = LoadActor(enemy_zombie_def, World, 2.0f, GE_ACTOR_RENDER_MIRRORS | GE_ACTOR_RENDER_NORMAL | GE_ACTOR_COLLIDE, z->XForm);
+		if( !z->Actor ) {
 			run = 0;
 			error("Failed to create the zombie actor");
 			continue;
 		}
+		// enable shaddows
+		geActor_SetStencilShadow(z->Actor, GE_TRUE);
+
+		enemy_zombie_setHealth(z);
 
 		geActor_SetUserData(z->Actor, (void*) z);
 		setup_box(z->ExtBox, z->Actor, z->Position);
@@ -570,7 +622,12 @@ geBoolean enemy_zombie_isAlive(geActor* enemy){
 	Inf_Enemy_Zombie* z;
 
 	z = (Inf_Enemy_Zombie*) geActor_GetUserData(enemy);
-	return (z->Health > 0);
+	if (z->Health > 0){
+		//system_message("not moving through");
+		return GE_TRUE;
+	}
+	//system_message("moving through");
+	return GE_FALSE;
 }
 
 geBoolean enemy_zombie_canDamage(geActor* enemy, // the enemy that got hit
@@ -595,8 +652,9 @@ geBoolean enemy_zombie_canDamage(geActor* enemy, // the enemy that got hit
 }
 
 geBoolean enemy_zombie_damage(geActor* enemy, // the enemy that got hit
-				  unsigned char damage, // how many point damage does this weaopon damage do?
+				  int damage, // how many point damage does this weaopon damage do?
 				  char type, // damage type, se above
+				  char lbd,
 				  /* Location Based Damage Data */
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range
@@ -607,20 +665,27 @@ geBoolean enemy_zombie_damage(geActor* enemy, // the enemy that got hit
 	geVec3d pos;
 
 	z = (Inf_Enemy_Zombie*) geActor_GetUserData(enemy);
-	geActor_GetDynamicExtBox(z->Actor, &eb);
 
-	if(! geExtBox_RayCollision( &eb, &fromPos, &toPos, 
-								&t, NULL ) // don't save the data
-								)
-	{
-		return GE_TRUE;
+	if( lbd){
+		geActor_GetDynamicExtBox(z->Actor, &eb);
+
+		if(! geExtBox_RayCollision( &eb, &fromPos, &toPos, 
+									&t, NULL ) // don't save the data
+									)
+		{
+			return GE_TRUE;
+		}
+
+
+		geVec3d_Subtract(&toPos, &fromPos, &pos);
+		//geVec3d_Scale(&pos, t, &pos);
+		geVec3d_AddScaled(&fromPos, &pos, t, &pos);
+
+		enemy_zombie_doDamage(z, type, damage, &pos);
 	}
-
-	geVec3d_Subtract(&toPos, &fromPos, &pos);
-	//geVec3d_Scale(&pos, t, &pos);
-	geVec3d_AddScaled(&fromPos, &pos, t, &pos);
-	
-	enemy_zombie_doDamage(z, type, damage, &pos);
+	else {
+		enemy_zombie_doDamage(z, type, damage, 0);
+	}
 
 	return GE_FALSE;
 }
@@ -647,4 +712,77 @@ void enemy_zombie_explosionDamage(geVec3d* location, float range, int damage){
 		// get next entity
 		Entity = geEntity_EntitySetGetNextEntity(Set, Entity);
 	}
+}
+
+void enemy_zombie_fireExplosionDamage(geVec3d* location, float range, int damage){
+	geEntity_EntitySet	*Set=0;
+	geEntity			*Entity=0;
+	
+	Set = geWorld_GetEntitySet(World, "Inf_Enemy_Zombie");
+	if (Set == NULL) return;
+	
+	// get first rain entity
+	Entity = geEntity_EntitySetGetNextEntity(Set, NULL);
+
+	// wade thru them all
+	while( Entity )
+	{
+		Inf_Enemy_Zombie* z;
+	
+		z = (Inf_Enemy_Zombie *)geEntity_GetUserData(Entity);
+		
+		enemy_zombie_doDamage(z, DAMAGE_FIRE, explosion_getDamage(location, &(z->Position), range, damage), 0);
+
+		// get next entity
+		Entity = geEntity_EntitySetGetNextEntity(Set, Entity);
+	}
+}
+
+geBoolean enemy_zombie_loopDamage(int damage, // how many point damage does this weaopon damage do?
+				  char type, // damage type, se above
+				  char lbd,
+				  /* Location Based Damage Data */
+				  geVec3d fromPos, //fromPos - location of the shooter
+				  geVec3d toPos // toPos - location of the weapon max range
+				  ){
+	geExtBox eb;
+	float t;
+	geEntity_EntitySet	*Set=0;
+	geEntity			*Entity=0;
+	geBoolean value = GE_FALSE;
+	
+	Set = geWorld_GetEntitySet(World, "Inf_Enemy_Zombie");
+	if (Set == NULL) return GE_FALSE;
+	Entity = geEntity_EntitySetGetNextEntity(Set, NULL);
+	while( Entity )
+	{
+		Inf_Enemy_Zombie* z;
+	
+		z = (Inf_Enemy_Zombie *)geEntity_GetUserData(Entity);
+		geActor_GetDynamicExtBox(z->Actor, &eb);
+		if(geExtBox_RayCollision( &eb, &fromPos, &toPos, 
+								&t, NULL ) // don't save the data
+								) {
+			GE_Collision lCol;
+			geVec3d loc;
+			geVec3d dir;
+			geVec3d_Subtract(&toPos, &fromPos, &dir);
+			geVec3d_AddScaled(&fromPos, &dir, t, &loc);
+			if( !geWorld_Collision(World, NULL, NULL, &fromPos, &loc , GE_CONTENTS_SOLID, GE_COLLIDE_MESHES | GE_COLLIDE_MODELS, 0x00000000, 0 ,NULL, &lCol) ) {
+				value = GE_TRUE;
+				//enemy_civilian_doDamage(z, type, damage, &loc);
+				enemy_zombie_doDamage(z, type, damage, &loc);
+			}
+			else {
+				if( cheats.debug )
+					console_message("stuff in the way of bullet");
+			}
+			// continue
+		}
+
+		// get next entity
+		Entity = geEntity_EntitySetGetNextEntity(Set, Entity);
+	}
+
+	return value;
 }

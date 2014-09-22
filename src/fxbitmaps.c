@@ -8,6 +8,8 @@
 #include "EffParticle.h"
 #include <math.h>
 #include "proposeg3d.h"
+#include "inf_message_system.h"
+#include "enemies.h"
 
 /*
 geBitmap*	stoneSmoke,
@@ -301,50 +303,56 @@ void ParticleExplosion(geBitmap* sprite, geVec3d location, geVec3d direction){
 		0.0f, 6, 20.0f, 2.0f) ) system_message("Failed to explode particle");*/
 
 	if(! EM_ParticleExplosion(EM, location, direction, sprite, 1.0f, gravity, 5.0f,
-		5.0f, 2, 2.0f, 0.25f) ) system_message("Failed to explode particle");
+		5.0f, 2, 2.0f, 0.25f, 0, 0) ) system_message("Failed to explode particle");
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+geBoolean fncb_AddBlood(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to){
+#define MIN 0.1f
+	geExtBox bb;
+	GE_RGBA rgba;
+	geVec3d In;
+	geBoolean result;
+	GE_Collision lCol;
+
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN);
+	
+	result = geWorld_Collision(World,&(bb.Min),&(bb.Max),from,to,GE_CONTENTS_SOLID_CLIP | GE_VISIBLE_CONTENTS,GE_COLLIDE_MODELS,0xffffffff, 0 ,NULL, &lCol);
+
+	if( result ) {
+		rgba.r = 255.0f;
+		rgba.g = 0.0f;
+		rgba.b = 0.0f;
+		rgba.a = particle->Alpha;
+		
+		geXForm3d_GetIn(geCamera_GetWorldSpaceXForm(EM->Camera), &In);
+		
+		// decals sometimes end up in the middle of the air! - fix this by doing a ray-col test here
+		DecalMgr_AddDecal(dMgr, DecalMgr_GetRandomDecal(DECALTYPE_SCORCHSM), -1.0f, rgba, 1.0f,
+		   &(lCol.Impact), &(lCol.Plane.Normal), &In);
+	}
+
+	return GE_TRUE;
+#undef MIN
 }
 
 #define MIN 0.1f
 void BloodExplosion(geVec3d position){
-	Blood sp;
-	int i;
+	//int i;
 	int count;
-	GE_RGBA rgba;
-	geVec3d gravity;
-	/*geVec3d direction;
-
-	geVec3d_Subtract(&XForm.Translation, &position, &direction); 
-	geVec3d_Normalize(&direction); */
-
-	count = 3;
-
-	rgba.r = 255.0f;
-	rgba.g = 0.0f;
-	rgba.b = 0.0f;
-	rgba.a = 255.0f;
 	
-	memset(&sp, 0, sizeof(Blood) );
-	geVec3d_Set(&gravity, 0.0f, -150.0f, 0.0f);
+	geVec3d gravity;
+	geExtBox bb;
+	geVec3d Velocity = {0,0,0};
 
-	sp.Color = rgba;
-	sp.decalColor = rgba;
-	sp.Gravity = gravity;
-	sp.Position = position;
-	sp.Texture = bloodTexture;
-	sp.TextureScale = 0.5f;
-	sp.mgr = dMgr;
-	sp.decalType = DECALTYPE_SCORCHSM;
-	geExtBox_Set(&sp.ExtBox, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN); 
+	count = 4;
+
+	
+	geVec3d_Set(&gravity, 0.0f, -150.0f, 0.0f);
+	geExtBox_Set(&bb, -1.0f * MIN , -1.0f * MIN , -1.0f * MIN , MIN, MIN, MIN); 
 
 #define SCALE_SIZE	80.0f
-	for( i=0; i<count; i++){
-		//geVec3d tempVec;
-		geVec3d_Set(&sp.Velocity, RAND_INVERT(SCALE_SIZE*RAND_FLOAT()), SCALE_SIZE*RAND_FLOAT(), RAND_INVERT(SCALE_SIZE*RAND_FLOAT()) );
-		sp.life = 1.0f + 0.5f * RAND_FLOAT();
-		/*geVec3d_Scale(&direction, 40.0f + 40.0f*RAND_FLOAT(), &sp.Velocity);
-		geVec3d_Add(&sp.Velocity, &tempVec, &sp.Velocity);*/
-		EM_Item_Add(EM, EFF_BLOOD, &sp);
-	}
+	EM_ParticleExplosion(EM, position, Velocity, bloodTexture, 1.0f, gravity, 1, SCALE_SIZE, count, 1.0f + 0.5f * RAND_FLOAT(), 0.3f, fncb_AddBlood, &bb);
 #undef SCALE_SIZE
 }
 #undef MIN
@@ -431,11 +439,12 @@ geBoolean fncb_bounceParticle(Particle* particle, GE_Collision* data, geVec3d* f
 geBoolean fncb_fireParticle(Particle* particle, GE_Collision* data, geVec3d* from, geVec3d* to){
 	if( data->Actor ) {
 		//data->Actor
+		enemy_damage(data->Actor, 50, DAMAGE_FIRE, 0, *from, *to);
 	}
 	else {
 		geVec3d impact;
 		geVec3d_AddScaled(&(data->Impact), &(data->Plane.Normal), 1.0f, &impact);
-		fx_fire(&impact, GE_FALSE);
+		fx_fire(&impact, GE_FALSE, 2.0f);
 	}
 
 	// this looked bad
@@ -452,7 +461,7 @@ geBoolean fncb_fireParticle(Particle* particle, GE_Collision* data, geVec3d* fro
 	return GE_TRUE;
 }
 
-void fx_grenadeExplosion(geVec3d at){
+void fx_explosion(geVec3d at, int smokes, int fire, int gems){
 #define MIN 0.1f
 #define SPHERE_POS_TYPE 1
 #define PI 3.1415926535
@@ -492,7 +501,7 @@ void fx_grenadeExplosion(geVec3d at){
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 
 	texture = smokeSprite;
-	count = 10;
+	count = smokes;
 	minLife = 6.0f;
 	maxLife = 12.0f;
 	minSpeed = 70.0f;
@@ -536,7 +545,7 @@ void fx_grenadeExplosion(geVec3d at){
 	// Fire
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 	texture = flameSprite;
-	count = 13;
+	count = fire;
 	minLife = 6.0f;
 	maxLife = 10.0f;
 	minSpeed = 10.0f;
@@ -579,7 +588,7 @@ void fx_grenadeExplosion(geVec3d at){
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 
 	texture = gemSprite;
-	count = 2;
+	count = gems;
 	minLife = 0.5f;
 	maxLife = 3.0f;
 	minSpeed = 100.0f;
@@ -617,7 +626,8 @@ void fx_grenadeExplosion(geVec3d at){
 
 #undef MIN
 }
-void fx_fire(geVec3d* at, geBoolean anchor){
+
+void fx_fire(geVec3d* at, geBoolean anchor, float life){
 	Spray sp;
 	geVec3d to;
 	int index;
@@ -641,7 +651,7 @@ void fx_fire(geVec3d* at, geBoolean anchor){
 	}
 
 	sp.Texture = flameSprite;
-	sp.SprayLife = 2.0f; // change to 0.5f
+	sp.SprayLife = life; // change to 0.5f
 	sp.Rate = 0.3f;
 	sp.ColorMin = rgba;
 	sp.ColorMax = rgba;
@@ -650,7 +660,7 @@ void fx_fire(geVec3d* at, geBoolean anchor){
 	sp.MinScale = 2.0f;
 	sp.MaxScale = 5.0f;
 	sp.MinUnitLife = 0.7f;
-	sp.MaxUnitLife = 1.0f;
+	sp.MaxUnitLife = 1.5f;
 	sp.MinSpeed = 70.0f;
 	sp.MaxSpeed = 80.0f;
 	sp.ScaleStyle = SSS_RANDOM_SCALE;
@@ -658,6 +668,23 @@ void fx_fire(geVec3d* at, geBoolean anchor){
 
 	index = EM_Item_Add(EM, EFF_SPRAY, &sp);
 }
+
+void fx_grenadeExplosion(geVec3d at){
+		fx_explosion(at, 10, 13,2);
+}
+void fx_fireExplosion(geVec3d at){
+		fx_explosion(at, 1, 23,1);
+}
+void fx_igrenadeExplosion(geVec3d at){
+		fx_explosion(at, 5, 5, 3);
+}
+
+
+
+
+
+
+
 void fx_shootFire(geVec3d at, geVec3d direction){
 #define MIN 5.0f
 	geExtBox bb;

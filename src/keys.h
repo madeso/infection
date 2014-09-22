@@ -46,6 +46,7 @@ typedef struct controls_tag
 	key screenshot;
 
 	key toggleFlashlight;
+	key drugKey;
 
 	key quickSave;
 	key quickLoad;

@@ -2,7 +2,7 @@
 #include "log.h"
 
 
-geActor_Def* LoadActorDef(char* fileName)
+geActor_Def* LoadActorDef(const char* fileName)
 {
 	//local variables
 	geVFile *File=0;
@@ -12,7 +12,9 @@ geActor_Def* LoadActorDef(char* fileName)
 	File = geVFile_OpenNewSystem(NULL, GE_VFILE_TYPE_DOS, fileName, NULL, GE_VFILE_OPEN_READONLY);
 	if( !File )
 	{
-		printLog("Couldn't open file.\n");
+		char str[400];
+		sprintf(str, "Couldn't open file %s.\n", fileName);
+		printLog(str);
 		return 0;
 	}
 	
@@ -37,6 +39,7 @@ geActor* LoadActor(geActor_Def* def, geWorld* World, float scale, uint32 flags, 
 	if( !r ) return 0;
 
 	geActor_SetScale(r, scale, scale, scale);
+	// 0x11111111
 	if( !geWorld_AddActor(World, r, flags, 0x11111111 ) )
 	{
 		geActor_Destroy( &r ); r=0;

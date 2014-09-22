@@ -31,8 +31,9 @@ void enemy_rat_iterate(geWorld* World, float time);//Done evry frame
 geBoolean enemy_rat_isAlive(geActor* enemy);
 
 geBoolean enemy_rat_damage(geActor* enemy, // the enemy that got hit
-				  unsigned char damage, // how many point damage does this weaopon damage do?
+				  int damage, // how many point damage does this weaopon damage do?
 				  char type, // damage type, se above
+				  char lbd,
 				  /* Location Based Damage Data */
 				  geVec3d fromPos, //fromPos - location of the shooter
 				  geVec3d toPos // toPos - location of the weapon max range

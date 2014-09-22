@@ -7,10 +7,14 @@
 #define Y_OFFSET 30
 char subtitle[300];
 geBoolean enabled = GE_TRUE;
+GE_RGBA subtitleColor;
 
 void subtitle_newGame(){
 	// make sure we know what the string contains!
 	memset(subtitle, 0, 300);
+
+	subtitleColor.r = subtitleColor.g = subtitleColor.b = 255.0f;
+	subtitleColor.a = 255.0f;
 }
 
 char* subtitle_getString(){
@@ -28,7 +32,7 @@ int subtitle_getPrintX(){
 	return (int)( (Width-printWidth) / 2.0f );
 }
 
-void subtitle_setSubtitle(char* newString){
+void subtitle_setSubtitle(const char* newString){
 	strcpy(subtitle, newString);
 }
 
@@ -39,6 +43,8 @@ void subtitle_SetEnable(geBoolean newEnable){
 geBoolean render_subTitle(){
 	int xpos = subtitle_getPrintX();
 	if( xpos == -1 ) return GE_TRUE;
-	if(! geEngine_Printf(Engine, xpos, Height - Y_OFFSET , subtitle_getString() ) ) return GE_FALSE;
+	//if(! geEngine_Printf(Engine, xpos, Height - Y_OFFSET , subtitle_getString() ) ) return GE_FALSE;
+
+	XFontMgr_PrintAt(fntMgr, xpos, Height - Y_OFFSET , kFontSmall, subtitleColor, Camera, "%s", subtitle_getString() );
 	return GE_TRUE;
 }

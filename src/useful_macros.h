@@ -23,7 +23,7 @@ Useful defines and macros
 #endif
 
 #ifndef METERS
-#define METERS(x)				x*100
+#define METERS(x)				x*30
 #endif
 
 #ifndef DEG

@@ -39,7 +39,8 @@
 #include "inventory.h"
 #include "inf_meny.h"
 #include "sound_modder.h"
-
+#include "pickup.h"
+#include "movie.h"
 #define START_SCREEN_NUMBER				0
 
 geBitmap* loadingImage=0;
@@ -124,6 +125,10 @@ geBoolean Init(HWND hWnd)
 	Camera = 0;
 	dMgr = 0;
 	EM = 0;
+	luaVM = 0; // init to a known value
+
+	colorDebug.r = colorDebug.g = colorDebug.b = 255.0f;
+	colorDebug.a = 255.0f;
 
 	strcpy(levelFileName, "");
 	fxbitmaps_init(); // make sure it's zero
@@ -141,6 +146,9 @@ geBoolean Init(HWND hWnd)
 		MessageBox(hWnd, "Could not create the Genesis Engine Object", "Infection error", 48);
 		return GE_FALSE;
 	}
+
+	// enable shaddows
+	geEngine_SetStencilShadowsEnable(Engine, GE_TRUE, 2, 0, 0, 0, 100.5f);
 
 
 	printLog("Setting the gamma.\n");
@@ -186,6 +194,9 @@ geBoolean Init(HWND hWnd)
 	Rect.Right = Width - 1;
 	Rect.Top = 0;
 	Rect.Bottom = Height - 1;
+
+	fntMgr = XFontMgr_FontMgr(Engine);
+	if( !fntMgr ) return GE_FALSE;
 
 	printLog("Camera rect is initialized.\n");
 
@@ -274,88 +285,88 @@ geBoolean Init(HWND hWnd)
 
 	// I really should check the return values of theense functions
 	//precashe player sounds
-	soundsys_loadWaw(".\\sfx\\player\\jump1.wav", &jump[0] );
-	soundsys_loadWaw(".\\sfx\\player\\jump2.wav", &jump[1] );
-	soundsys_loadWaw(".\\sfx\\player\\jump3.wav", &jump[2] );
+	soundsys_loadSound(".\\sfx\\player\\jump1.wav", 1, &jump[0], 0, TYPE_2D);
+	soundsys_loadSound(".\\sfx\\player\\jump2.wav", 1, &jump[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\jump3.wav", 1, &jump[2], 0, TYPE_2D );
 	
-	soundsys_loadWaw(".\\sfx\\player\\hurt1.wav", &hurt[0] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt2.wav", &hurt[1] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt3.wav", &hurt[2] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt4.wav", &hurt[3] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt5.wav", &hurt[4] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt6.wav", &hurt[5] );
-	soundsys_loadWaw(".\\sfx\\player\\hurt7.wav", &hurt[6] );
+	soundsys_loadSound(".\\sfx\\player\\hurt1.wav", 1, &hurt[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt2.wav", 1, &hurt[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt3.wav", 1, &hurt[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt4.wav", 1, &hurt[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt5.wav", 1, &hurt[4], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt6.wav", 1, &hurt[5], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\hurt7.wav", 1, &hurt[6], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\die1.wav", &die[0] );
-	soundsys_loadWaw(".\\sfx\\player\\die2.wav", &die[1] );
-	soundsys_loadWaw(".\\sfx\\player\\die3.wav", &die[2] );
-	soundsys_loadWaw(".\\sfx\\player\\die4.wav", &die[3] );
-	soundsys_loadWaw(".\\sfx\\player\\die5.wav", &die[4] );
+	soundsys_loadSound(".\\sfx\\player\\die1.wav", 1, &die[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\die2.wav", 1, &die[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\die3.wav", 1, &die[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\die4.wav", 1, &die[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\die5.wav", 1, &die[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\armor.wav", &armor[0] );
-	soundsys_loadWaw(".\\sfx\\player\\armor2.wav", &armor[1] );
-	soundsys_loadWaw(".\\sfx\\player\\armor3.wav", &armor[2] );
-	soundsys_loadWaw(".\\sfx\\player\\armor4.wav", &armor[3] );
-	soundsys_loadWaw(".\\sfx\\player\\armor5.wav", &armor[4] );
+	soundsys_loadSound(".\\sfx\\player\\armor.wav", 1, &armor[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\armor2.wav", 1, &armor[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\armor3.wav", 1, &armor[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\armor4.wav", 1, &armor[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\armor5.wav", 1, &armor[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\land1.wav", &land_normal[0] );
-	soundsys_loadWaw(".\\sfx\\player\\land2.wav", &land_normal[1] );
-	soundsys_loadWaw(".\\sfx\\player\\land3.wav", &land_normal[2] );
+	soundsys_loadSound(".\\sfx\\player\\land1.wav", 1, &land_normal[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\land2.wav", 1, &land_normal[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\land3.wav", 1, &land_normal[2], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\splash0.wav", &splash[0] );
-	soundsys_loadWaw(".\\sfx\\player\\splash1.wav", &splash[1] );
-	soundsys_loadWaw(".\\sfx\\player\\splash2.wav", &splash[2] );
-	soundsys_loadWaw(".\\sfx\\player\\splash3.wav", &splash[3] );
-	soundsys_loadWaw(".\\sfx\\player\\splash4.wav", &splash[4] );
-	soundsys_loadWaw(".\\sfx\\player\\splash5.wav", &splash[5] );
+	soundsys_loadSound(".\\sfx\\player\\splash0.wav", 1, &splash[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\splash1.wav", 1, &splash[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\splash2.wav", 1, &splash[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\splash3.wav", 1, &splash[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\splash4.wav", 1, &splash[4], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\splash5.wav", 1, &splash[5], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\breathing_again.wav", &breathing_again );
-	soundsys_loadWaw(".\\sfx\\player\\outofwater.wav", &outofwater );
+	soundsys_loadSound(".\\sfx\\player\\breathing_again.wav", 1, &breathing_again, 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\outofwater.wav", 1, &outofwater, 0, TYPE_2D );
 
 	//load bob sounds
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk1.wav", &bob_normal_right[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk3.wav", &bob_normal_right[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk5.wav", &bob_normal_right[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk7.wav", &bob_normal_right[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk9.wav", &bob_normal_right[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk1.wav", 1, &bob_normal_right[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk3.wav", 1, &bob_normal_right[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk5.wav", 1, &bob_normal_right[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk7.wav", 1, &bob_normal_right[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk9.wav", 1, &bob_normal_right[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk0.wav", &bob_normal_left[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk2.wav", &bob_normal_left[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk4.wav", &bob_normal_left[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk6.wav", &bob_normal_left[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\_walk8.wav", &bob_normal_left[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk0.wav", 1, &bob_normal_left[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk2.wav", 1, &bob_normal_left[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk4.wav", 1, &bob_normal_left[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk6.wav", 1, &bob_normal_left[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\_walk8.wav", 1, &bob_normal_left[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water1.wav", &bob_water_right[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water3.wav", &bob_water_right[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water5.wav", &bob_water_right[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water7.wav", &bob_water_right[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water9.wav", &bob_water_right[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water1.wav", 1, &bob_water_right[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water3.wav", 1, &bob_water_right[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water5.wav", 1, &bob_water_right[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water7.wav", 1, &bob_water_right[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water9.wav", 1, &bob_water_right[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water0.wav", &bob_water_left[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water2.wav", &bob_water_left[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water4.wav", &bob_water_left[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water6.wav", &bob_water_left[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\water8.wav", &bob_water_left[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water0.wav", 1, &bob_water_left[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water2.wav", 1, &bob_water_left[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water4.wav", 1, &bob_water_left[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water6.wav", 1, &bob_water_left[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\water8.wav", 1, &bob_water_left[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder0.wav", &bob_ladder_right[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder2.wav", &bob_ladder_right[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder4.wav", &bob_ladder_right[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder6.wav", &bob_ladder_right[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder8.wav", &bob_ladder_right[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder0.wav", 1, &bob_ladder_right[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder2.wav", 1, &bob_ladder_right[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder4.wav", 1, &bob_ladder_right[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder6.wav", 1, &bob_ladder_right[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder8.wav", 1, &bob_ladder_right[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder1.wav", &bob_ladder_left[0] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder3.wav", &bob_ladder_left[1] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder5.wav", &bob_ladder_left[2] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder7.wav", &bob_ladder_left[3] );
-	soundsys_loadWaw(".\\sfx\\player\\bob\\ladder9.wav", &bob_ladder_left[4] );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder1.wav", 1, &bob_ladder_left[0], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder3.wav", 1, &bob_ladder_left[1], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder5.wav", 1, &bob_ladder_left[2], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder7.wav", 1, &bob_ladder_left[3], 0, TYPE_2D );
+	soundsys_loadSound(".\\sfx\\player\\bob\\ladder9.wav", 1, &bob_ladder_left[4], 0, TYPE_2D );
 
-	soundsys_loadWaw(".\\sfx\\boing.wav", &boing );
+	soundsys_loadSound(".\\sfx\\boing.wav", 1, &boing, 1, TYPE_2D );
 
 	// the mugshots
-	soundsys_loadWaw(".\\sfx\\player\\mugshots\\cool.wav", &mugshots[0] );
-	soundsys_loadWaw(".\\sfx\\player\\mugshots\\iamtheking.wav", &mugshots[1] );
-	soundsys_loadWaw(".\\sfx\\player\\mugshots\\iliveforthis.wav", &mugshots[2] );
-	soundsys_loadWaw(".\\sfx\\player\\mugshots\\yeah.wav", &mugshots[3] );
+	soundsys_loadSound(".\\sfx\\player\\mugshots\\cool.wav", 1, &mugshots[0], 0, TYPE_UNAFFECTED );
+	soundsys_loadSound(".\\sfx\\player\\mugshots\\iamtheking.wav", 1, &mugshots[1], 0, TYPE_UNAFFECTED );
+	soundsys_loadSound(".\\sfx\\player\\mugshots\\iliveforthis.wav", 1, &mugshots[2], 0, TYPE_UNAFFECTED );
+	soundsys_loadSound(".\\sfx\\player\\mugshots\\yeah.wav", 1, &mugshots[3], 0, TYPE_UNAFFECTED );
 
 #ifdef NDEBUG
 	cheats.god = GE_FALSE;
@@ -424,6 +435,12 @@ geBoolean Init(HWND hWnd)
 
 	timefx_normal();
 
+	if(! player_loadDefinitions() )
+	{
+		printLog("Player init failed\n");
+		return GE_FALSE;
+	}
+
 	setPlayerName("DefaultPlayer");
 
 	timeout_init();
@@ -433,13 +450,17 @@ geBoolean Init(HWND hWnd)
 		return GE_FALSE;
 	}
 
-	if(! inf_luaInit() ){
+	/*if(! inf_luaInit() ){
 		printLog("Failed to init lua\n");
 		return GE_FALSE;
-	}
+	}*/
 
 	if( !meny_init() ){
-		printLog("Failed to init meny");
+		printLog("Failed to init meny\n");
+		return GE_FALSE;
+	}
+	if(! pickup_loadActorDefinitions() ){
+		printLog("Failed to init pickup actor definitions\n");
 		return GE_FALSE;
 	}
 
@@ -479,11 +500,17 @@ geBoolean FindDriver()
 	long tempwidth;
 	long tempheight;
 	int i = 1;
+	geDriver* foundDriver = 0;
+	geDriver_Mode* foundMode = 0;
 	
 	printLog("Attempting to find a driver.\n");
 
 	//Get the first driver
 	Driver = geDriver_SystemGetNextDriver(DrvSys, NULL);
+
+	printLog("\n\n");
+	printLog("Aviable driver list:\n");
+	printLog("\n\n");
 
 	//Loop through the driver list and find that matches what we loaded into our variables
 	while(1)
@@ -491,22 +518,37 @@ geBoolean FindDriver()
 		//no first driver
 		if( !Driver)
 		{
+			if ( foundDriver ) {
+				break;
+			}
+			else {
 			MessageBox(hWnd, "Could not find a valid driver", "Infection Eroor", 48);
 			printLog("No valid driver was found.\n");
 			return GE_FALSE;
+			}
 		}
 		
 		//get the name of the driver
 		geDriver_GetName(Driver, (const char**)&drvname); //C++ convertion style
 
+		{
+			char str[300];
+			sprintf(str, "Found driver: %s\n", drvname);
+			printLog(str);
+		}
+
 		//Check if the first character matches the driver we loaded into before. If it is, then break the loop
-		if(drvname[0] == ourdriver)
-			break;
+		if(drvname[0] == ourdriver) {
+			foundDriver = Driver;
+			//break;
+		}
 
 		//if not, get the next one
 		Driver = geDriver_SystemGetNextDriver(DrvSys, Driver);
 	}
+	Driver = foundDriver;
 
+	printLog("\n\n");
 	printLog("Driver found.\n");
 
 	//Get the first mode
@@ -514,38 +556,57 @@ geBoolean FindDriver()
 
 	printLog("Attempting to find mode.\n");
 
+	printLog("\n\n");
+	printLog("Aviable mode list:\n");
+	printLog("\n\n");
+
 	//Loop through the list and find that mode that matches the width and height of our variable
 	while(1)
 	{
 		//No mode
 		if( !Mode )
 		{
+			if ( foundMode ) {
+				break;
+			}
+			else {
 			MessageBox(hWnd, "Could not find a valid mode", "Infection error", 48);
 			printLog("Could not find a valid mode.\n");
 			sprintf(str, "Iterator: %d.\n", i);
 			printLog(str);
 			return GE_FALSE;
+			}
 		}
 		
 		//Get the width and the height of the mode
 		geDriver_ModeGetWidthHeight(Mode, &tempwidth, &tempheight);
 
+		{
+			char str[300];
+			sprintf(str, "Width=%d, Height=%d\n", tempwidth, tempheight);
+			printLog(str);
+		}
+
 		//See if it's a match, if so we'll break the loop
 		if( fullscreen )
 		{
 			if(tempwidth == Width && tempheight == Height)
-				break;
+				foundMode = Mode;
+				//break;
 		}
 		else
 		{
 			if(tempwidth == -1 && tempheight == -1)
-				break;
+				foundMode = Mode;
 		}
 
 		//if not get the next mode
 		i++;
 		Mode = geDriver_GetNextMode(Driver, Mode);
 	}
+	Mode = foundMode;
+
+	printLog("\n\n");
 
 	printLog("Mode found.\n");
 
@@ -610,6 +671,7 @@ geBoolean LoadPrefs(char *drv, int *width, int *height, char* fullscreen, Option
 	controls.console = VK_F1;
 	controls.crouch = VK_CONTROL;
 	controls.forward = 'W';
+	controls.drugKey = VK_RETURN;
 	controls.holdwalk = VK_SHIFT;
 	controls.jet = 'Q';
 	controls.jump = VK_SPACE;
@@ -702,6 +764,9 @@ geBoolean LoadPrefs(char *drv, int *width, int *height, char* fullscreen, Option
 			} else if( strcmp(type, "<FULLSCREEN>") == 0) {
 				int t=0; sscanf(data, " %d", &t );
 				*fullscreen = t?1:0;
+#ifdef _DEBUG
+				*fullscreen = 0;
+#endif
 				sprintf(str, "Got the fullscreen: %d.\n", *fullscreen);
 				printLog(str);
 			} else if( strcmp(type, "<ENABLE_EFFECTS>") == 0) {
@@ -824,11 +889,12 @@ void LeaveLevel()
 	kill_decals();
 
 	kill_fx();
+	soundsys_freeTemporaries();
 
 	if(World)
 	{
 		printLog("Clearing world\n");
-		//geEngine_RemoveWorld(Engine, World);
+		geEngine_RemoveWorld(Engine, World);
 		//With the previous line uncommented geWorld_Free sometimes crashes: I found this post by Jeff in a search on the g3d board, and when commenting that line there was no crash.
 		/*
 		This might not be the problem but the geEngine_RemoveWorld() function calls geWorld_Free() so you don't need to call it right after that function. Also, the geEngine_Free() function calls all these functions: 
@@ -844,8 +910,8 @@ void LeaveLevel()
 		*/
 		
 		printLog("World has been removed from the engine.\n");
-		geWorld_Free(World);
-		printLog("World is free.\n");
+		//geWorld_Free(World);
+		//printLog("World is free.\n");
 
 		World = 0;
 		global_levelHeader = 0;
@@ -1006,16 +1072,14 @@ void LoadLevel_LevelHeader(geWorld *World , int fromLoad)
 
 
 
-
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //		LoadLevel
 //			Loads up a level specified by the filename
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-geBoolean LoadLevel(char *baseFileName, int fromLoad)
+geBoolean LoadLevel(const char *baseFileName, int fromLoad)
 {
 	geVFile *Level;
-	char Filename[200];
+	char Filename[400];
 	
 	sprintf(Filename, ".\\levels\\%s\\level.bsp", baseFileName ); // levels must be in the level directory
 
@@ -1087,7 +1151,26 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 	{
 		MessageBox(hWnd, "Could not add the world to the engine", "Infection Error", 48);
 		printLog("Couldn't add the world to the engine.\n");
+		exit_application();
 		return GE_FALSE;
+	}
+
+	printLog("Exiting lua\n");
+	inf_luaExit();
+	printLog("Lua exited, trying to reload\n");
+	if(! inf_luaInit() ) {
+		MessageBox(hWnd, "Could not reinit lua-engine", "Infection Error", 48);
+		printLog("Failed to re-init lua.\n");
+		exit_application();
+	}
+	printLog("Lua inited\n");
+	console_initLua();
+	
+	// run init.lua
+	{
+		char luaFile[400];
+		sprintf(luaFile, ".\\levels\\%s\\init.lua", baseFileName );
+		inf_do_luafile(luaFile);
 	}
 
 	//------------------------
@@ -1099,6 +1182,7 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 		printLog("PLayerStart\n");
 		LoadLevel_PlayerStart( World );
 	}
+
 	printLog("LevelHeader\n");
 	LoadLevel_LevelHeader( World, fromLoad );
 
@@ -1148,6 +1232,11 @@ geBoolean LoadLevel(char *baseFileName, int fromLoad)
 
 	printLog("LoadLevel returned successful.\n");
 
+	// fix up player interaction
+	reset_cursor();
+	// fix up time
+	timing_reset();
+
 	return GE_TRUE;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1178,6 +1267,9 @@ void ShutDown()
 	printLog("Leaving level");
 	LeaveLevel();
 
+	player_clearDefinitions();
+
+	pickup_clearActorDefinitions();
 	meny_delete();
 
 	inventory_delete();
@@ -1190,6 +1282,8 @@ void ShutDown()
 	destroy_hud();
 	soundsys_destroy();
 	console_delete();
+	XFontMgr_Destructor(fntMgr);
+	fntMgr = 0;
 
 	if( loadingImage )
 	{
@@ -1264,6 +1358,11 @@ geBoolean SavePrefs()
 	fprintf(f, "# The driver to use \n");				fprintf(f, "<DRIVER> %c \n", ourdriver);
 	fprintf(f, "# The width of the aplication \n");		fprintf(f, "<WIDTH> %d \n", Width);
 	fprintf(f, "# The height of the application \n");	fprintf(f, "<HEIGHT> %d \n", Height);
+
+#ifdef _DEBUG
+				fullscreen = 1;
+#endif
+
 	fprintf(f, "# Fullscreen variable \n");				fprintf(f, "<FULLSCREEN> %d \n", fullscreen);
 	fprintf(f, "# Enable/Use effects? \n");				fprintf(f, "<ENABLE_EFFECTS> %d \n", options.enable_effects );
 	fprintf(f, "# Enable/Use decals\n");					fprintf(f, "<ENABLE_DECALS> %d \n", options.enable_decals );

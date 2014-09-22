@@ -4,11 +4,11 @@
 
 HashTable* g_inventory;
 
-void inventory_add(char* name){
+void inventory_add(const char* name){
 	HT_Add(g_inventory, 1, name);
 }
 
-void inventory_remove(char* name){
+void inventory_remove(const char* name){
 	HT_Remove(g_inventory, name);
 }
 
@@ -27,7 +27,7 @@ void inventory_delete(){
 	}
 }
 
-char inventory_has(char* filename){
+char inventory_has(const char* filename){
 	int data=0;
 	return HT_Find(g_inventory, filename, &data) != 0;
 }
